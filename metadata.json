@@ -1,0 +1,8 @@
+{
+  "name": "FRAME - AI Short-Form Video Studio",
+  "description": "Premium short-form video creation platform for TikTok, Reels, and Shorts. Turn ideas into hooks, scene-by-scene scripts, teleprompter cues, captions, and CTAs.",
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ],
+  "permissions": []
+}

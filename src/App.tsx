@@ -1,0 +1,207 @@
+import React, { useState, useEffect } from 'react';
+import { Navbar } from './components/Navbar';
+import { HomeView } from './components/HomeView';
+import { StudioView } from './components/StudioView';
+import { CreationsView } from './components/CreationsView';
+import { SettingsView } from './components/SettingsView';
+import { VideoProject, UserSettings, Platform, Tone, DurationOption, QuickEditRequest } from './types';
+import {
+  loadSavedProjects,
+  saveProject,
+  deleteProject,
+  loadSettings,
+  saveSettings,
+} from './services/storage';
+import { checkApiStatus, generateProject, quickEditProject, ApiStatus } from './services/api';
+
+export function App() {
+  const [currentTab, setCurrentTab] = useState<'home' | 'studio' | 'creations' | 'settings'>('home');
+  const [activeProject, setActiveProject] = useState<VideoProject | null>(null);
+  const [savedProjects, setSavedProjects] = useState<VideoProject[]>([]);
+  const [settings, setSettings] = useState<UserSettings>(loadSettings());
+  const [apiStatus, setApiStatus] = useState<ApiStatus | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isQuickEditing, setIsQuickEditing] = useState(false);
+
+  // Load initial projects & check API status
+  useEffect(() => {
+    const loaded = loadSavedProjects();
+    setSavedProjects(loaded);
+    if (loaded.length > 0 && !activeProject) {
+      setActiveProject(loaded[0]);
+    }
+
+    checkApiStatus().then(setApiStatus);
+  }, []);
+
+  const handleGenerate = async (params: {
+    idea: string;
+    platform: Platform;
+    tone: Tone;
+    duration: DurationOption;
+    language: string;
+  }) => {
+    setIsGenerating(true);
+    try {
+      const newProj = await generateProject({
+        ...params,
+        preferDemo: settings.preferDemoMode,
+      });
+
+      // Save and set active
+      saveProject(newProj);
+      setActiveProject(newProj);
+      setSavedProjects(loadSavedProjects());
+      setCurrentTab('studio');
+    } catch (err) {
+      console.error('Generation failed:', err);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleQuickEdit = async (req: QuickEditRequest) => {
+    setIsQuickEditing(true);
+    try {
+      const updated = await quickEditProject(req);
+      saveProject(updated);
+      setActiveProject(updated);
+      setSavedProjects(loadSavedProjects());
+    } catch (err) {
+      console.error('Quick edit failed:', err);
+    } finally {
+      setIsQuickEditing(false);
+    }
+  };
+
+  const handleSaveActiveProject = (proj: VideoProject) => {
+    saveProject(proj);
+    setActiveProject(proj);
+    setSavedProjects(loadSavedProjects());
+  };
+
+  const handleDeleteProject = (id: string) => {
+    deleteProject(id);
+    const updated = loadSavedProjects();
+    setSavedProjects(updated);
+    if (activeProject?.id === id) {
+      setActiveProject(updated.length > 0 ? updated[0] : null);
+      if (updated.length === 0) {
+        setCurrentTab('home');
+      }
+    }
+  };
+
+  const handleDuplicateProject = (proj: VideoProject) => {
+    const duplicated: VideoProject = {
+      ...proj,
+      id: 'proj_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36),
+      title: `${proj.title} (Copy)`,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    saveProject(duplicated);
+    setSavedProjects(loadSavedProjects());
+  };
+
+  const handleRenameProject = (id: string, newTitle: string) => {
+    const target = savedProjects.find((p) => p.id === id);
+    if (target) {
+      const updated = { ...target, title: newTitle, updatedAt: new Date().toISOString() };
+      saveProject(updated);
+      setSavedProjects(loadSavedProjects());
+      if (activeProject?.id === id) {
+        setActiveProject(updated);
+      }
+    }
+  };
+
+  const handleOpenFromCreations = (proj: VideoProject) => {
+    setActiveProject(proj);
+    setCurrentTab('studio');
+  };
+
+  const handleUpdateSettings = (newSettings: UserSettings) => {
+    setSettings(newSettings);
+    saveSettings(newSettings);
+  };
+
+  const handleDataReset = () => {
+    setSavedProjects([]);
+    setActiveProject(null);
+    setCurrentTab('home');
+  };
+
+  return (
+    <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col font-sans">
+      <Navbar
+        currentTab={currentTab}
+        onSelectTab={setCurrentTab}
+        apiStatus={apiStatus}
+        preferDemoMode={settings.preferDemoMode}
+        hasActiveProject={Boolean(activeProject)}
+        onNewProject={() => setCurrentTab('home')}
+        savedCount={savedProjects.length}
+      />
+
+      <main className="flex-1 pb-16">
+        {currentTab === 'home' && (
+          <HomeView
+            onGenerate={handleGenerate}
+            isGenerating={isGenerating}
+            settings={settings}
+            isAiLive={Boolean(apiStatus?.liveAiAvailable && !settings.preferDemoMode)}
+          />
+        )}
+
+        {currentTab === 'studio' && activeProject && (
+          <StudioView
+            project={activeProject}
+            onUpdateProject={setActiveProject}
+            onSaveProject={handleSaveActiveProject}
+            onApplyQuickEdit={handleQuickEdit}
+            isQuickEditing={isQuickEditing}
+            isAiLive={Boolean(apiStatus?.liveAiAvailable)}
+            preferDemoMode={settings.preferDemoMode}
+          />
+        )}
+
+        {currentTab === 'creations' && (
+          <CreationsView
+            projects={savedProjects}
+            onOpenProject={handleOpenFromCreations}
+            onDeleteProject={handleDeleteProject}
+            onDuplicateProject={handleDuplicateProject}
+            onRenameProject={handleRenameProject}
+            onNewProject={() => setCurrentTab('home')}
+          />
+        )}
+
+        {currentTab === 'settings' && (
+          <SettingsView
+            settings={settings}
+            onUpdateSettings={handleUpdateSettings}
+            savedProjectCount={savedProjects.length}
+            onDataReset={handleDataReset}
+            isAiLive={Boolean(apiStatus?.liveAiAvailable)}
+          />
+        )}
+      </main>
+
+      {/* Minimal Footer */}
+      <footer className="border-t border-zinc-900 bg-zinc-950/60 py-6 px-4 text-center text-xs text-zinc-500">
+        <div className="mx-auto max-w-7xl flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center space-x-2">
+            <span className="font-semibold text-zinc-400">FRAME</span>
+            <span>—</span>
+            <span>Minimalist Short-Form Video Creation Studio</span>
+          </div>
+          <div className="text-[11px] text-zinc-500">
+            Inspired by Apple’s design language • TikTok, Reels & Shorts
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
+export default App;
