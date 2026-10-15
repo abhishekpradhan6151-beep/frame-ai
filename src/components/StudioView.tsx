@@ -154,8 +154,36 @@ export const StudioView: React.FC<StudioViewProps> = ({
     onUpdateProject({ ...project, hooks: updatedHooks });
   };
 
+  const handleAddHook = () => {
+    const newHook: Hook = {
+      id: 'h_' + Date.now().toString(36),
+      angle: 'curiosity',
+      label: 'Custom Hook',
+      text: `Did you know this one secret about "${project.idea}"?`,
+      viralityScore: 90,
+      retentionTip: 'Keep eyes directly on the lens, pause for half a second before speaking.',
+    };
+    onUpdateProject({ ...project, hooks: [...project.hooks, newHook] });
+  };
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      {/* Stage 1 Demo Content Notice */}
+      <div className="mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/70 p-3.5 text-xs text-zinc-300 backdrop-blur-sm gap-2">
+        <div className="flex items-center space-x-2.5">
+          <span className="flex h-2 w-2 rounded-full bg-amber-400" />
+          <span className="font-semibold text-zinc-200">Demo Content Mode:</span>
+          <span className="text-zinc-400">
+            This blueprint was created using Stage 1 structured sample creator models. Full editing, copy controls, and teleprompter are active.
+          </span>
+        </div>
+        <div className="flex items-center space-x-2 shrink-0">
+          <span className="rounded-md border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-[10px] text-zinc-400 font-mono">
+            Stage 1 Demo
+          </span>
+        </div>
+      </div>
+
       {/* Studio Header Bar */}
       <div className="mb-6 rounded-2xl border border-zinc-800 bg-zinc-950/70 p-5 shadow-xl backdrop-blur-md">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
@@ -343,12 +371,25 @@ export const StudioView: React.FC<StudioViewProps> = ({
             </button>
           </div>
 
-          <div className="space-y-3">
-            {project.scenes.map((scene, idx) => (
-              <div
-                key={scene.id || idx}
-                className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-5 shadow-lg backdrop-blur-sm transition-all hover:border-zinc-700"
+          {project.scenes.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/40 p-12 text-center">
+              <Film className="mx-auto h-8 w-8 text-zinc-600 mb-2" />
+              <p className="text-xs text-zinc-400">No scenes in this script yet.</p>
+              <button
+                onClick={handleAddScene}
+                className="mt-3 inline-flex items-center space-x-1.5 rounded-xl bg-white text-black px-3.5 py-1.5 text-xs font-semibold hover:bg-zinc-200 transition-all"
               >
+                <Plus className="h-3.5 w-3.5" />
+                <span>Add First Scene</span>
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {project.scenes.map((scene, idx) => (
+                <div
+                  key={scene.id || idx}
+                  className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-5 shadow-lg backdrop-blur-sm transition-all hover:border-zinc-700"
+                >
                 {/* Scene Header */}
                 <div className="flex items-center justify-between mb-4 border-b border-zinc-800/60 pb-3">
                   <div className="flex items-center space-x-3">
@@ -476,17 +517,40 @@ export const StudioView: React.FC<StudioViewProps> = ({
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
+    )}
 
       {/* TAB CONTENT 2: HOOKS */}
       {activeTab === 'hooks' && (
         <div className="space-y-4">
-          <p className="text-xs text-zinc-400">
-            The first 2 seconds decide 80% of your video’s performance. Select your primary hook or edit the angles below.
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-zinc-400">
+              The first 2 seconds decide 80% of your video’s performance. Select your primary hook or edit the angles below.
+            </p>
+            <button
+              onClick={handleAddHook}
+              className="flex items-center space-x-1.5 rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-white transition-all shrink-0 ml-3"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>Add Hook</span>
+            </button>
+          </div>
 
-          <div className="grid grid-cols-1 gap-3">
+          {project.hooks.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/40 p-12 text-center">
+              <Sparkles className="mx-auto h-8 w-8 text-zinc-600 mb-2" />
+              <p className="text-xs text-zinc-400">No hooks generated for this script yet.</p>
+              <button
+                onClick={handleAddHook}
+                className="mt-3 inline-flex items-center space-x-1.5 rounded-xl bg-white text-black px-3.5 py-1.5 text-xs font-semibold hover:bg-zinc-200 transition-all"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>Add First Hook</span>
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3">
             {project.hooks.map((hook, idx) => {
               const isSelected = project.selectedHookId === hook.id;
               return (
@@ -565,8 +629,9 @@ export const StudioView: React.FC<StudioViewProps> = ({
               );
             })}
           </div>
-        </div>
-      )}
+        )}
+      </div>
+    )}
 
       {/* TAB CONTENT 3: CAPTIONS & HASHTAGS */}
       {activeTab === 'captions' && (

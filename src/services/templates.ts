@@ -188,6 +188,29 @@ export function generateMockProject(
     );
   }
 
+  if (sceneCount >= 8) {
+    scenes.push(
+      {
+        id: 'sc_7',
+        sceneNumber: 7,
+        durationSeconds: avgSceneDuration,
+        visualCue: 'Step back to whiteboard or screen layout summarizing the 3 pillars.',
+        audioVoiceover: `To recap: simplify your premise, automate your friction points, and ship consistently.`,
+        onScreenText: 'THE 3 PILLARS SUMMARY 📊',
+        bRollPrompt: 'Diagram lines connecting concepts on screen.',
+      },
+      {
+        id: 'sc_8',
+        sceneNumber: 8,
+        durationSeconds: avgSceneDuration,
+        visualCue: 'Direct eye contact, earnest smile, hand point toward follow button.',
+        audioVoiceover: `If this shifted how you think about "${cleanIdea}", tap follow and share it with a friend who is building something today.`,
+        onScreenText: 'JOIN THE COMMUNITY 🚀',
+        bRollPrompt: 'Creator community avatars or social profile interaction.',
+      }
+    );
+  }
+
   // Ensure scenes array exactly matches target sceneCount
   const finalScenes = scenes.slice(0, sceneCount).map((s, idx) => ({
     ...s,

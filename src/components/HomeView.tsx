@@ -51,16 +51,28 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const [tone, setTone] = useState<Tone>(settings.defaultTone || 'viral-hype');
   const [duration, setDuration] = useState<DurationOption>(settings.defaultDuration || 30);
   const [language, setLanguage] = useState<string>(settings.defaultLanguage || 'en');
+  const [error, setError] = useState<string | null>(null);
   const [loadingStep, setLoadingStep] = useState(0);
 
   const handleRandomIdea = () => {
     const random = SAMPLE_IDEAS[Math.floor(Math.random() * SAMPLE_IDEAS.length)];
     setIdea(random);
+    setError(null);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!idea.trim() || isGenerating) return;
+    if (!idea.trim()) {
+      setError('Please provide a video topic or click "Surprise Me" to get started.');
+      return;
+    }
+    if (idea.trim().length < 5) {
+      setError('Please enter at least 5 characters for a meaningful script blueprint.');
+      return;
+    }
+    if (isGenerating) return;
+
+    setError(null);
 
     // Simulate progressive step text during generation
     setLoadingStep(1);
@@ -83,6 +95,23 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
+      {/* Stage 1 Demo Mode Notice */}
+      <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3.5 backdrop-blur-sm flex items-center justify-between text-xs">
+        <div className="flex items-center space-x-2.5">
+          <span className="flex h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+          <span className="font-semibold text-zinc-200">Stage 1 Architecture:</span>
+          <span className="text-zinc-400 hidden sm:inline">
+            Generating clearly labelled demo creator blueprints. Fully prepared for secure backend Gemini integration.
+          </span>
+          <span className="text-zinc-400 sm:hidden">
+            Demo sample blueprints active.
+          </span>
+        </div>
+        <span className="rounded-md border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-[10px] font-mono text-zinc-400">
+          v1.0 Demo
+        </span>
+      </div>
+
       {/* Hero Header */}
       <div className="mb-10 text-center">
         <div className="inline-flex items-center space-x-2 rounded-full border border-zinc-800 bg-zinc-900/60 px-3.5 py-1 text-xs text-zinc-400 backdrop-blur mb-4">
@@ -121,12 +150,29 @@ export const HomeView: React.FC<HomeViewProps> = ({
           <textarea
             id="idea"
             rows={3}
+            maxLength={500}
             value={idea}
-            onChange={(e) => setIdea(e.target.value)}
+            onChange={(e) => {
+              setIdea(e.target.value);
+              if (error) setError(null);
+            }}
             placeholder="e.g., Why 90% of creators fail on TikTok in the first 30 days and the 1 rule that changes everything..."
             className="w-full resize-none rounded-xl border border-zinc-800/80 bg-zinc-900/50 p-4 text-sm text-zinc-100 placeholder-zinc-500 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
-            required
           />
+
+          <div className="flex items-center justify-between mt-2">
+            <div>
+              {error && (
+                <div className="flex items-center space-x-1.5 text-xs text-red-400 animate-fade-in">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  <span>{error}</span>
+                </div>
+              )}
+            </div>
+            <div className="text-[11px] font-mono text-zinc-500 text-right">
+              {idea.length} / 500
+            </div>
+          </div>
 
           {/* Quick inspiration chips */}
           <div className="mt-3 flex flex-wrap gap-2 items-center">
