@@ -24,6 +24,9 @@ if (apiKey) {
   });
 }
 
+import fs from 'fs';
+import path from 'path';
+
 // 1. Status endpoint
 app.get('/api/status', (req, res) => {
   res.json({
@@ -31,6 +34,16 @@ app.get('/api/status', (req, res) => {
     model: 'gemini-3.8-flash',
     environment: process.env.NODE_ENV || 'development',
   });
+});
+
+// Download ZIP endpoint
+app.get('/api/download-zip', (req, res) => {
+  const zipPath = path.resolve(process.cwd(), 'frame-ai.zip');
+  if (fs.existsSync(zipPath)) {
+    res.download(zipPath, 'frame-ai.zip');
+  } else {
+    res.status(404).json({ error: 'Archive not found' });
+  }
 });
 
 // 2. Full project generation endpoint
@@ -43,11 +56,17 @@ app.post('/api/generate', async (req, res) => {
       duration = 30,
       language = 'en',
       preferDemo = false,
+      customInstructions,
     } = req.body;
 
     if (!idea || typeof idea !== 'string') {
       return res.status(400).json({ error: 'idea is required' });
     }
+
+    const sanitizedCustom =
+      typeof customInstructions === 'string' && customInstructions.trim()
+        ? customInstructions.trim().slice(0, 2000)
+        : undefined;
 
     // If client requested demo mode or no Gemini API key is configured
     if (preferDemo || !aiClient) {
@@ -56,7 +75,8 @@ app.post('/api/generate', async (req, res) => {
         platform as Platform,
         tone as Tone,
         Number(duration) as DurationOption,
-        language
+        language,
+        sanitizedCustom
       );
       return res.json(mockProject);
     }
@@ -69,6 +89,7 @@ Platform: ${platform}
 Tone: ${tone}
 Target Duration: ${duration} seconds
 Language: ${language}
+${sanitizedCustom ? `\nCreative Direction & Custom Creative Instructions:\n"${sanitizedCustom}"\nCRITICAL: You must strictly adhere to these customized instructions when creating the hooks, visual scene cues, camera angles, voiceover rhythm, pacing, and calls to action.\n` : ''}
 
 Provide:
 1. Exactly 5 distinctive hook angles (curiosity, viral-shock, relatable-story, hot-take, statistic).
@@ -182,6 +203,7 @@ Provide:
       updatedAt: now,
       isAiGenerated: true,
       modelUsed: 'gemini-3.8-flash',
+      customInstructions: sanitizedCustom,
     };
 
     res.json(project);
@@ -193,7 +215,8 @@ Provide:
       (req.body.platform as Platform) || 'tiktok',
       (req.body.tone as Tone) || 'viral-hype',
       (Number(req.body.duration) as DurationOption) || 30,
-      req.body.language || 'en'
+      req.body.language || 'en',
+      typeof req.body.customInstructions === 'string' ? req.body.customInstructions : undefined
     );
     fallback.modelUsed = 'Demo Engine (Fallback on Gemini Error)';
     res.json(fallback);

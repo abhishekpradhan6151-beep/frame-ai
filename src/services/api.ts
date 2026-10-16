@@ -31,8 +31,14 @@ export async function generateProject(req: GenerateRequest): Promise<VideoProjec
     const data: VideoProject = await res.json();
     return data;
   } catch (err) {
-    console.warn('Network call failed, using client-side fallback generation:', err);
-    return generateMockProject(req.idea, req.platform, req.tone, req.duration, req.language);
+    return generateMockProject(
+      req.idea,
+      req.platform,
+      req.tone,
+      req.duration,
+      req.language,
+      req.customInstructions
+    );
   }
 }
 

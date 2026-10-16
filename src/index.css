@@ -1,18 +1,104 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @layer base {
-  * {
-    border-color: var(--color-zinc-800, #27272a);
+  :root, html.light, [data-theme="light"] {
+    --canvas-bg: #f8fafc;
+    --canvas-text: #0f172a;
+    --canvas-text-muted: #64748b;
+    --canvas-border: rgba(15, 23, 42, 0.08);
+    --glass-bg: rgba(255, 255, 255, 0.76);
+    --glass-border: rgba(15, 23, 42, 0.08);
+    --glass-hover: rgba(255, 255, 255, 0.94);
+    --glass-shadow: 0 10px 30px 0 rgba(15, 23, 42, 0.06), 0 1px 2px 0 rgba(15, 23, 42, 0.04);
+    --card-surface: rgba(255, 255, 255, 0.85);
+    --card-border: rgba(15, 23, 42, 0.08);
+    --input-bg: rgba(255, 255, 255, 0.9);
+    --input-border: rgba(15, 23, 42, 0.12);
+    --input-text: #0f172a;
+    --input-placeholder: #94a3b8;
+    --badge-bg: rgba(255, 255, 255, 0.9);
+    --badge-border: rgba(15, 23, 42, 0.12);
+    --btn-primary-bg: #0f172a;
+    --btn-primary-text: #ffffff;
+    --nav-bg: rgba(255, 255, 255, 0.82);
+    --nav-border: rgba(15, 23, 42, 0.08);
   }
+
+  html.dark, [data-theme="dark"] {
+    --canvas-bg: #09090b;
+    --canvas-text: #f4f4f5;
+    --canvas-text-muted: #a1a1aa;
+    --canvas-border: rgba(255, 255, 255, 0.08);
+    --glass-bg: rgba(18, 18, 23, 0.72);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-hover: rgba(24, 24, 30, 0.85);
+    --glass-shadow: 0 12px 36px 0 rgba(0, 0, 0, 0.5), 0 1px 2px 0 rgba(255, 255, 255, 0.02);
+    --card-surface: rgba(18, 18, 23, 0.72);
+    --card-border: rgba(255, 255, 255, 0.08);
+    --input-bg: rgba(20, 20, 26, 0.7);
+    --input-border: rgba(255, 255, 255, 0.1);
+    --input-text: #f4f4f5;
+    --input-placeholder: #71717a;
+    --badge-bg: rgba(24, 24, 27, 0.9);
+    --badge-border: rgba(255, 255, 255, 0.12);
+    --btn-primary-bg: #ffffff;
+    --btn-primary-text: #09090b;
+    --nav-bg: rgba(9, 9, 11, 0.82);
+    --nav-border: rgba(255, 255, 255, 0.08);
+  }
+
   body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: var(--canvas-bg);
+    color: var(--canvas-text);
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    transition: background-color 0.25s ease, color 0.25s ease;
+    min-height: 100vh;
   }
+
   code, pre {
     font-family: 'JetBrains Mono', monospace;
   }
 }
 
-/* Custom subtle scrollbars for studio editing */
+/* Apple Liquid Glass Utility Classes */
+.glass-surface {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+.glass-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-card:hover {
+  background: var(--glass-hover);
+  border-color: rgba(99, 102, 241, 0.25);
+  box-shadow: 0 12px 40px -8px rgba(99, 102, 241, 0.12), var(--glass-shadow);
+}
+
+.glass-pill {
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+html.dark .glass-pill {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* Custom subtle scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -21,9 +107,47 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #27272a;
+  background: rgba(148, 163, 184, 0.3);
   border-radius: 9999px;
 }
+html.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+}
 ::-webkit-scrollbar-thumb:hover {
-  background: #3f3f46;
+  background: rgba(148, 163, 184, 0.5);
+}
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* Subtle Aperture Glint Animation */
+@keyframes subtleGlint {
+  0%, 100% {
+    transform: rotate(-45deg) translate(-140%, -140%);
+    opacity: 0;
+  }
+  30%, 45% {
+    opacity: 1;
+  }
+  60% {
+    transform: rotate(-45deg) translate(140%, 140%);
+    opacity: 0;
+  }
+}
+
+.animate-subtle-glint {
+  animation: subtleGlint 8s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+/* Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-subtle-glint {
+    animation: none !important;
+  }
 }

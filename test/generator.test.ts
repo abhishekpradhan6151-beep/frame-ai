@@ -72,6 +72,21 @@ describe('FRAME Short-Form Video Generator', () => {
     expect(Object.keys(TONE_LABELS).length).toBe(6);
     expect(AVAILABLE_LANGUAGES.length).toBeGreaterThanOrEqual(7);
   });
+
+  it('incorporates custom creative instructions into generated blueprint', () => {
+    const customPrompt = 'Cinematic moody lighting, high contrast B-roll, witty fast-paced delivery';
+    const project = generateMockProject(
+      'AI productivity stack',
+      'tiktok',
+      'viral-hype',
+      30,
+      'en',
+      customPrompt
+    );
+
+    expect(project.customInstructions).toBe(customPrompt);
+    expect(project.modelUsed).toContain('Custom Creative Instructions Applied');
+  });
 });
 
 describe('FRAME Local Persistence & Settings', () => {

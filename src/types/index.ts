@@ -49,6 +49,8 @@ export interface CtaVariation {
   text: string;
 }
 
+export type ThemeMode = 'light' | 'dark' | 'system';
+
 export interface VideoProject {
   id: string;
   title: string;
@@ -67,6 +69,7 @@ export interface VideoProject {
   updatedAt: string;
   isAiGenerated: boolean;
   modelUsed?: string;
+  customInstructions?: string;
 }
 
 export interface UserSettings {
@@ -78,6 +81,7 @@ export interface UserSettings {
   autoSave: boolean;
   teleprompterSpeed: number;
   teleprompterFontSize: number;
+  themeMode?: ThemeMode;
 }
 
 export interface GenerateRequest {
@@ -87,6 +91,7 @@ export interface GenerateRequest {
   duration: DurationOption;
   language: string;
   preferDemo?: boolean;
+  customInstructions?: string;
 }
 
 export interface QuickEditRequest {

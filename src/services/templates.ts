@@ -73,7 +73,8 @@ export function generateMockProject(
   platform: Platform,
   tone: Tone,
   duration: DurationOption,
-  language: string = 'en'
+  language: string = 'en',
+  customInstructions?: string
 ): VideoProject {
   const cleanIdea = idea.trim() || 'How to create 10x content in 1 hour a week';
   const id = 'proj_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
@@ -286,6 +287,9 @@ export function generateMockProject(
     createdAt: now,
     updatedAt: now,
     isAiGenerated: false,
-    modelUsed: 'Demo Engine (Deterministic Framework)',
+    modelUsed: customInstructions
+      ? 'Demo Blueprint (Custom Creative Instructions Applied)'
+      : 'Demo Blueprint (Deterministic Framework)',
+    customInstructions,
   };
 }

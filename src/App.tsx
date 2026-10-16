@@ -4,7 +4,7 @@ import { HomeView } from './components/HomeView';
 import { StudioView } from './components/StudioView';
 import { CreationsView } from './components/CreationsView';
 import { SettingsView } from './components/SettingsView';
-import { VideoProject, UserSettings, Platform, Tone, DurationOption, QuickEditRequest } from './types';
+import { VideoProject, UserSettings, Platform, Tone, DurationOption, QuickEditRequest, ThemeMode } from './types';
 import {
   loadSavedProjects,
   saveProject,
@@ -13,6 +13,8 @@ import {
   saveSettings,
 } from './services/storage';
 import { checkApiStatus, generateProject, quickEditProject, ApiStatus } from './services/api';
+import { useTheme } from './services/theme';
+import { Logo } from './components/Logo';
 
 export function App() {
   const [currentTab, setCurrentTab] = useState<'home' | 'studio' | 'creations' | 'settings'>('home');
@@ -22,6 +24,7 @@ export function App() {
   const [apiStatus, setApiStatus] = useState<ApiStatus | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isQuickEditing, setIsQuickEditing] = useState(false);
+  const { theme, setTheme } = useTheme();
 
   // Load initial projects & check API status
   useEffect(() => {
@@ -40,6 +43,7 @@ export function App() {
     tone: Tone;
     duration: DurationOption;
     language: string;
+    customInstructions?: string;
   }) => {
     setIsGenerating(true);
     try {
@@ -133,7 +137,7 @@ export function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#09090b] text-slate-900 dark:text-zinc-100 flex flex-col font-sans transition-colors duration-200">
       <Navbar
         currentTab={currentTab}
         onSelectTab={setCurrentTab}
@@ -142,6 +146,8 @@ export function App() {
         hasActiveProject={Boolean(activeProject)}
         onNewProject={() => setCurrentTab('home')}
         savedCount={savedProjects.length}
+        theme={theme}
+        onSelectTheme={setTheme}
       />
 
       <main className="flex-1 pb-16">
@@ -151,6 +157,7 @@ export function App() {
             isGenerating={isGenerating}
             settings={settings}
             isAiLive={Boolean(apiStatus?.liveAiAvailable && !settings.preferDemoMode)}
+            onNavigateToCreations={() => setCurrentTab('creations')}
           />
         )}
 
@@ -184,23 +191,28 @@ export function App() {
             savedProjectCount={savedProjects.length}
             onDataReset={handleDataReset}
             isAiLive={Boolean(apiStatus?.liveAiAvailable)}
+            theme={theme}
+            onSelectTheme={setTheme}
           />
         )}
       </main>
 
-      {/* Minimal Footer */}
-      <footer className="border-t border-zinc-900 bg-zinc-950/60 py-6 px-4 text-center text-xs text-zinc-500">
-        <div className="mx-auto max-w-7xl flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center space-x-2">
-            <span className="font-semibold text-zinc-400">FRAME</span>
-            <span>—</span>
-            <span>Minimalist Short-Form Video Creation Studio</span>
+      {/* Minimalist Liquid Glass Footer for non-home pages */}
+      {currentTab !== 'home' && (
+        <footer className="border-t border-slate-200/80 dark:border-white/[0.08] bg-white/60 dark:bg-zinc-950/60 backdrop-blur-md py-6 px-4 text-center text-xs text-slate-500 dark:text-zinc-400">
+          <div className="mx-auto max-w-7xl flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center space-x-2.5">
+              <Logo size={20} showWordmark={false} />
+              <span className="font-semibold text-slate-800 dark:text-zinc-300">FRAME AI</span>
+              <span>—</span>
+              <span>Short-Form Studio</span>
+            </div>
+            <div className="text-[11px] text-slate-500 dark:text-zinc-400">
+              TikTok, Reels & Shorts • Powered by Google Gemini 3.8
+            </div>
           </div>
-          <div className="text-[11px] text-zinc-500">
-            Inspired by Apple’s design language • TikTok, Reels & Shorts
-          </div>
-        </div>
-      </footer>
+        </footer>
+      )}
     </div>
   );
 }
