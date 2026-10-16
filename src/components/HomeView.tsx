@@ -166,11 +166,11 @@ export const HomeView: React.FC<HomeViewProps> = ({
         <div className="w-full mt-10">
           <form
             onSubmit={handleSubmit}
-            className="w-full rounded-3xl bg-white/85 dark:bg-zinc-900/50 border border-slate-200/90 dark:border-white/[0.09] shadow-xl shadow-slate-200/50 dark:shadow-2xl dark:shadow-black/60 backdrop-blur-2xl p-5 sm:p-7 relative transition-all duration-300 focus-within:border-indigo-500/40 dark:focus-within:border-white/20 focus-within:shadow-indigo-500/5 text-left"
+            className="w-full rounded-3xl bg-white/85 dark:bg-[#121217]/75 border border-[var(--border-default)] shadow-xl shadow-slate-200/50 dark:shadow-[0_1px_0_0_rgba(255,255,255,0.12)_inset,0_20px_48px_-6px_rgba(0,0,0,0.7)] backdrop-blur-2xl p-5 sm:p-7 relative transition-all duration-240 ease-liquid-spring focus-within:border-[var(--border-strong)] focus-within:shadow-2xl text-left"
           >
-            {/* Subtle light reflection on top border */}
+            {/* Delicate specular light reflection on top border */}
             <div
-              className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-slate-300/40 dark:via-white/25 to-transparent rounded-t-3xl"
+              className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-slate-300/60 dark:via-white/30 to-transparent rounded-t-3xl"
               aria-hidden="true"
             />
 
@@ -199,14 +199,38 @@ export const HomeView: React.FC<HomeViewProps> = ({
               </div>
             )}
 
+            {/* Quick Inspiration Pills */}
+            <div className="mt-3 flex flex-wrap items-center gap-1.5 pt-1">
+              <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-400 mr-1 hidden sm:inline">Try:</span>
+              {[
+                '3 common mistakes beginners make in...',
+                'Stop doing this if you want to grow on...',
+                'Behind the scenes of building a product in 48 hours',
+                'The controversial truth about productivity hacks'
+              ].map((suggestion, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => {
+                    setIdea(suggestion);
+                    setError(null);
+                    if (textareaRef.current) textareaRef.current.focus();
+                  }}
+                  className="rounded-full px-2.5 py-1 text-[11px] text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white bg-slate-100/70 hover:bg-slate-200/80 dark:bg-white/[0.04] dark:hover:bg-white/[0.08] border border-[var(--border-subtle)] hover:border-[var(--border-default)] transition-all cursor-pointer truncate max-w-[240px] sm:max-w-none text-left"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+
             {/* Bottom Row: Settings Pill (Left) + Generate Button (Right) */}
-            <div className="pt-4 mt-2 border-t border-slate-200/80 dark:border-white/[0.07] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3.5 transition-colors duration-200">
+            <div className="pt-4 mt-3 border-t border-[var(--border-subtle)] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3.5 transition-colors duration-200">
               {/* Bottom-left settings trigger */}
               <button
                 type="button"
                 onClick={handleOpenSettings}
                 aria-label={`Current settings: ${settingsSummary}. Click to adjust platform, language, tone, or duration.`}
-                className="group flex items-center gap-2 text-xs text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-white/[0.05] transition-all py-1.5 px-2.5 -ml-2 rounded-xl active:scale-[0.98] self-start sm:self-auto"
+                className="group flex items-center gap-2 text-xs text-slate-600 hover:text-slate-900 border border-[var(--border-subtle)] bg-slate-100/70 hover:bg-slate-200/70 dark:text-zinc-400 dark:hover:text-zinc-200 dark:bg-white/[0.04] dark:hover:bg-white/[0.08] transition-all py-1.5 px-3 rounded-full active:scale-[0.98] self-start sm:self-auto"
               >
                 <SlidersHorizontal className="h-3.5 w-3.5 text-slate-500 dark:text-zinc-400 group-hover:text-slate-900 dark:group-hover:text-zinc-200 transition-colors shrink-0" />
                 <span className="font-normal tracking-wide truncate max-w-[280px] sm:max-w-xs">
@@ -215,23 +239,28 @@ export const HomeView: React.FC<HomeViewProps> = ({
               </button>
 
               {/* Bottom-right Generate button */}
-              <button
-                type="submit"
-                disabled={isGenerating}
-                className="rounded-full bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:hover:bg-zinc-100 dark:text-zinc-950 font-semibold px-5 py-2.5 text-xs sm:text-sm transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5 shrink-0 self-stretch sm:self-auto disabled:opacity-50 cursor-pointer"
-              >
-                {isGenerating ? (
-                  <>
-                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                    <span>Generating...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Generate content</span>
-                    <span className="font-bold ml-0.5">→</span>
-                  </>
-                )}
-              </button>
+              <div className="flex items-center gap-2 self-stretch sm:self-auto">
+                <span className="text-[10px] text-slate-500 dark:text-zinc-400 hidden lg:inline select-none">
+                  ⌘↵ to run
+                </span>
+                <button
+                  type="submit"
+                  disabled={isGenerating}
+                  className="rounded-full bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:hover:bg-zinc-100 dark:text-zinc-950 font-semibold px-5 py-2.5 text-xs sm:text-sm transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5 shrink-0 w-full sm:w-auto disabled:opacity-50 cursor-pointer border border-[var(--border-subtle)]"
+                >
+                  {isGenerating ? (
+                    <>
+                      <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      <span>Generating...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Generate content</span>
+                      <span className="font-bold ml-0.5">→</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </form>
         </div>
@@ -262,15 +291,21 @@ export const HomeView: React.FC<HomeViewProps> = ({
           role="dialog"
           aria-modal="true"
           aria-labelledby="settings-dialog-title"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/40 dark:bg-black/60 backdrop-blur-md animate-fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/50 dark:bg-black/70 backdrop-blur-md animate-fade-in"
           onClick={() => setIsSettingsOpen(false)}
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-lg rounded-3xl bg-white/95 dark:bg-zinc-900/90 border border-slate-200/90 dark:border-white/[0.12] shadow-2xl p-6 sm:p-7 backdrop-blur-2xl text-left relative overflow-hidden flex flex-col max-h-[90vh] transition-colors duration-200"
+            className="w-full max-w-lg rounded-3xl bg-white/95 dark:bg-[#121217]/95 border border-[var(--border-default)] shadow-2xl p-6 sm:p-7 backdrop-blur-2xl text-left relative overflow-hidden flex flex-col max-h-[90vh] transition-colors duration-200 animate-modal-enter"
           >
+            {/* Top specular reflection line */}
+            <div
+              className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-slate-300/60 dark:via-white/35 to-transparent rounded-t-3xl"
+              aria-hidden="true"
+            />
+
             {/* Top Header */}
-            <div className="flex items-center justify-between pb-4 border-b border-slate-200/80 dark:border-white/[0.08] shrink-0">
+            <div className="flex items-center justify-between pb-4 border-b border-[var(--border-subtle)] shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 text-slate-800 border border-slate-200 dark:bg-white/10 dark:text-white dark:border-white/10">
                   <SlidersHorizontal className="h-4 w-4" />

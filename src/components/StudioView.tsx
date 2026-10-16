@@ -329,7 +329,13 @@ export const StudioView: React.FC<StudioViewProps> = ({
       </div>
 
       {/* Main Studio Navigation Tabs: Apple Liquid Glass Segmented Bar */}
-      <div className="mb-6 flex flex-wrap gap-1.5 p-1 rounded-2xl glass-surface border border-slate-200/80 dark:border-white/10 w-fit">
+      <div className="relative mb-6 flex flex-wrap gap-1.5 p-1 rounded-2xl glass-surface border border-[var(--border-default)] w-fit overflow-hidden">
+        {/* Top specular reflection line */}
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-slate-300/50 dark:via-white/20 to-transparent"
+          aria-hidden="true"
+        />
+
         {[
           { key: 'scenes', label: 'Script Scenes', count: project.scenes.length },
           { key: 'hooks', label: 'Hook Variations', count: project.hooks.length },
@@ -341,10 +347,10 @@ export const StudioView: React.FC<StudioViewProps> = ({
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key as any)}
-              className={`rounded-xl px-3.5 py-1.5 text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 ${
+              className={`rounded-xl px-3.5 py-1.5 text-xs sm:text-sm font-semibold transition-all duration-200 ease-liquid-spring flex items-center gap-2 cursor-pointer active:scale-[0.97] ${
                 isActive
                   ? 'bg-slate-900 text-white dark:bg-white dark:text-zinc-950 shadow-sm'
-                  : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+                  : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100/60 dark:hover:bg-white/5'
               }`}
             >
               <span>{tab.label}</span>
@@ -371,7 +377,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
             </p>
             <button
               onClick={handleAddScene}
-              className="flex items-center space-x-1.5 rounded-xl border border-slate-200/80 dark:border-white/10 bg-white/70 dark:bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-zinc-300 hover:bg-white dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white transition-all shadow-sm active:scale-95"
+              className="flex items-center space-x-1.5 rounded-xl border border-[var(--border-subtle)] hover:border-[var(--border-default)] bg-white/70 dark:bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-zinc-300 hover:bg-white dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white transition-all shadow-sm active:scale-95"
             >
               <Plus className="h-3.5 w-3.5" />
               <span>Add Scene</span>
@@ -379,12 +385,12 @@ export const StudioView: React.FC<StudioViewProps> = ({
           </div>
 
           {project.scenes.length === 0 ? (
-            <div className="rounded-3xl border border-dashed border-slate-300 dark:border-white/10 bg-white/40 dark:bg-zinc-950/40 p-12 text-center backdrop-blur-sm">
+            <div className="rounded-3xl border border-dashed border-[var(--border-default)] bg-white/40 dark:bg-zinc-950/40 p-12 text-center backdrop-blur-sm">
               <Film className="mx-auto h-8 w-8 text-slate-400 dark:text-zinc-600 mb-2" />
               <p className="text-xs text-slate-500 dark:text-zinc-400">No scenes in this script yet.</p>
               <button
                 onClick={handleAddScene}
-                className="mt-3 inline-flex items-center space-x-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:text-black dark:hover:bg-zinc-200 px-3.5 py-1.5 text-xs font-semibold transition-all shadow-sm"
+                className="mt-3 inline-flex items-center space-x-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:text-black dark:hover:bg-zinc-200 px-3.5 py-1.5 text-xs font-semibold transition-all shadow-sm active:scale-95"
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span>Add First Scene</span>
@@ -395,10 +401,16 @@ export const StudioView: React.FC<StudioViewProps> = ({
               {project.scenes.map((scene, idx) => (
                 <div
                   key={scene.id || idx}
-                  className="rounded-2xl glass-card p-5 shadow-sm border border-slate-200/80 dark:border-white/10 transition-all"
+                  className="rounded-2xl glass-card p-5 shadow-sm border border-[var(--border-default)] hover:border-[var(--border-strong)] transition-all duration-200 ease-liquid-spring relative overflow-hidden"
                 >
+                  {/* Top specular reflection line */}
+                  <div
+                    className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-slate-300/40 dark:via-white/15 to-transparent rounded-t-2xl"
+                    aria-hidden="true"
+                  />
+
                   {/* Scene Header */}
-                  <div className="flex items-center justify-between mb-4 border-b border-slate-200/60 dark:border-white/10 pb-3">
+                  <div className="flex items-center justify-between mb-4 border-b border-[var(--border-subtle)] pb-3">
                     <div className="flex items-center space-x-3">
                       <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-500/10 dark:bg-white/10 text-xs font-bold text-indigo-600 dark:text-white border border-indigo-500/20 dark:border-white/10">
                         {scene.sceneNumber}

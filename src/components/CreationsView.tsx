@@ -157,12 +157,18 @@ export const CreationsView: React.FC<CreationsViewProps> = ({
             return (
               <div
                 key={p.id}
-                className="group rounded-3xl glass-card p-5 flex flex-col justify-between shadow-sm border border-slate-200/80 dark:border-white/10 hover:border-indigo-500/30 transition-all"
+                className="group rounded-3xl glass-card p-5 flex flex-col justify-between shadow-sm border border-[var(--border-default)] hover:border-[var(--border-strong)] transition-all duration-200 ease-liquid-spring relative overflow-hidden"
               >
+                {/* Top specular reflection line */}
+                <div
+                  className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-slate-300/50 dark:via-white/20 to-transparent rounded-t-3xl"
+                  aria-hidden="true"
+                />
+
                 <div>
                   {/* Top metadata tags */}
                   <div className="flex items-center justify-between mb-3">
-                    <span className="rounded-lg border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-white/10 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-800 dark:text-zinc-200">
+                    <span className="rounded-lg border border-[var(--border-subtle)] bg-slate-100/90 dark:bg-white/10 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-800 dark:text-zinc-200">
                       {PLATFORM_INFO[p.platform]?.label || p.platform}
                     </span>
                     <span className="text-[11px] text-slate-400 dark:text-zinc-500 flex items-center space-x-1">

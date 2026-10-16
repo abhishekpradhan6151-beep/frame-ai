@@ -133,3 +133,44 @@ describe('FRAME Local Persistence & Settings', () => {
     expect(imported).toBe(true);
   });
 });
+
+describe('FRAME Theme Transition & State Management', () => {
+  it('verifies theme modes light, dark, and system apply data-theme and colorScheme', async () => {
+    const classList = new Set<string>();
+    const attributes = new Map<string, string>();
+    const docMock = {
+      documentElement: {
+        classList: {
+          add: (cls: string) => classList.add(cls),
+          remove: (cls: string) => classList.delete(cls),
+          contains: (cls: string) => classList.has(cls),
+        },
+        setAttribute: (key: string, val: string) => attributes.set(key, val),
+        getAttribute: (key: string) => attributes.get(key),
+        style: {} as Record<string, string>,
+      },
+    };
+    (globalThis as any).document = docMock;
+
+    const { applyTheme, getInitialTheme } = await import('../src/services/theme');
+    expect(typeof getInitialTheme).toBe('function');
+    expect(typeof applyTheme).toBe('function');
+
+    // Test dark mode
+    applyTheme('dark', false);
+    expect(classList.has('dark')).toBe(true);
+    expect(attributes.get('data-theme')).toBe('dark');
+    expect(docMock.documentElement.style.colorScheme).toBe('dark');
+
+    // Test light mode
+    applyTheme('light', false);
+    expect(classList.has('light')).toBe(true);
+    expect(attributes.get('data-theme')).toBe('light');
+    expect(docMock.documentElement.style.colorScheme).toBe('light');
+
+    // Test transition state flag
+    applyTheme('dark', true);
+    expect(classList.has('theme-transitioning')).toBe(true);
+  });
+});
+

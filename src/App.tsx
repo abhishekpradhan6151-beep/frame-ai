@@ -150,7 +150,7 @@ export function App() {
         onSelectTheme={setTheme}
       />
 
-      <main className="flex-1 pb-16">
+      <main key={currentTab} className="flex-1 pb-16 animate-page-enter">
         {currentTab === 'home' && (
           <HomeView
             onGenerate={handleGenerate}

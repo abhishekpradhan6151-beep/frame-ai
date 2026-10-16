@@ -67,8 +67,13 @@ export const AdvancedPromptModal: React.FC<AdvancedPromptModalProps> = ({
       className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/50 dark:bg-black/75 backdrop-blur-md animate-fade-in"
     >
       <div
-        className="w-full max-w-2xl rounded-3xl glass-surface p-6 sm:p-8 shadow-2xl relative border border-slate-200/90 dark:border-white/10 overflow-hidden flex flex-col max-h-[90vh]"
+        className="w-full max-w-2xl rounded-3xl glass-surface p-6 sm:p-8 shadow-2xl relative border border-[var(--border-default)] overflow-hidden flex flex-col max-h-[90vh] animate-modal-enter"
       >
+        {/* Top specular reflection line */}
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-slate-300/60 dark:via-white/35 to-transparent rounded-t-3xl"
+          aria-hidden="true"
+        />
         {/* Subtle Liquid Glow Accent in corner */}
         <div className="pointer-events-none absolute -top-24 -right-24 w-60 h-60 rounded-full bg-indigo-500/15 dark:bg-indigo-500/20 blur-3xl" />
 

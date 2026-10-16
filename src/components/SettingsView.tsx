@@ -113,6 +113,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       <div className="space-y-6">
         {/* Section 0: Appearance / Theme Selector */}
         <div className="rounded-3xl glass-surface p-6 sm:p-7 shadow-xl">
+          {/* Top edge glass reflection line */}
+          <div
+            className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-slate-300/50 dark:via-white/20 to-transparent rounded-t-3xl"
+            aria-hidden="true"
+          />
+
           <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-zinc-300 mb-2 flex items-center gap-2">
             <Palette className="h-4 w-4 text-indigo-500" />
             <span>Appearance & Theme</span>
@@ -134,18 +140,42 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   key={item.id}
                   type="button"
                   onClick={() => onSelectTheme(item.id as ThemeMode)}
-                  className={`rounded-2xl p-4 text-left border transition-all flex flex-col justify-between ${
+                  className={`relative rounded-2xl p-4 text-left border transition-all duration-200 ease-liquid-spring cursor-pointer flex flex-col justify-between overflow-hidden active:scale-[0.98] ${
                     isSelected
-                      ? 'border-indigo-500 bg-indigo-50/70 dark:bg-indigo-950/40 text-slate-900 dark:text-white ring-1 ring-indigo-500/30 shadow-xs'
-                      : 'border-slate-200/80 dark:border-white/5 bg-white/60 dark:bg-white/5 text-slate-700 dark:text-zinc-300 hover:border-slate-300 dark:hover:border-white/10'
+                      ? 'border-[var(--border-strong)] bg-slate-900/[0.04] dark:bg-white/[0.08] shadow-md scale-[1.02] ring-1 ring-slate-900/10 dark:ring-white/20'
+                      : 'border-[var(--border-default)] bg-white/60 dark:bg-white/[0.02] text-slate-700 dark:text-zinc-300 hover:border-[var(--border-strong)] hover:bg-white/80 dark:hover:bg-white/[0.05]'
                   }`}
                 >
+                  {/* Subtle specular highlight on selected card */}
+                  {isSelected && (
+                    <div
+                      className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-indigo-500/50 dark:via-white/40 to-transparent"
+                      aria-hidden="true"
+                    />
+                  )}
+
                   <div className="flex items-center justify-between mb-2">
-                    <Icon className={`h-4 w-4 ${isSelected ? 'text-indigo-500' : 'text-slate-400 dark:text-zinc-500'}`} />
-                    {isSelected && <Check className="h-3.5 w-3.5 text-indigo-500" />}
+                    <Icon
+                      className={`h-4 w-4 transition-transform duration-300 ${
+                        isSelected
+                          ? 'text-indigo-600 dark:text-indigo-400 scale-110'
+                          : 'text-slate-400 dark:text-zinc-500'
+                      }`}
+                    />
+                    {isSelected && (
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 dark:bg-white text-white dark:text-zinc-950 shadow-xs">
+                        <Check className="h-3 w-3 stroke-[3]" />
+                      </span>
+                    )}
                   </div>
                   <div>
-                    <div className="text-xs font-bold">{item.label}</div>
+                    <div
+                      className={`text-xs font-bold ${
+                        isSelected ? 'text-slate-900 dark:text-white' : 'text-slate-700 dark:text-zinc-300'
+                      }`}
+                    >
+                      {item.label}
+                    </div>
                     <div className="text-[10px] text-slate-500 dark:text-zinc-400 mt-0.5">{item.desc}</div>
                   </div>
                 </button>
