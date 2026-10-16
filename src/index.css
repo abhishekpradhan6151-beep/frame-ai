@@ -92,6 +92,11 @@
     color: var(--canvas-text);
     font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     min-height: 100vh;
+    transition: background-color 380ms cubic-bezier(0.16, 1, 0.3, 1),
+                color 380ms cubic-bezier(0.16, 1, 0.3, 1);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-tap-highlight-color: transparent;
   }
 
   code, pre {
@@ -101,39 +106,43 @@
 
 /* 
  * 1. Coordinated Smooth Theme Switching (300-450ms)
- * Synchronously animates background, cards, panels, borders, text, and shadows together
- * without flickering or layout shifts.
+ * Synchronously animates backgrounds, surfaces, borders, text, and shadows together
+ * without layout shifts, visual stutter, or overriding active spatial transforms.
  */
 html.theme-transitioning,
 html.theme-transitioning body,
-html.theme-transitioning div,
 html.theme-transitioning header,
 html.theme-transitioning nav,
+html.theme-transitioning main,
 html.theme-transitioning footer,
 html.theme-transitioning section,
-html.theme-transitioning main,
+html.theme-transitioning form,
+html.theme-transitioning .glass-surface,
+html.theme-transitioning .glass-card,
+html.theme-transitioning .glass-pill,
 html.theme-transitioning button,
 html.theme-transitioning input,
 html.theme-transitioning textarea,
 html.theme-transitioning select,
-html.theme-transitioning span,
-html.theme-transitioning p,
 html.theme-transitioning h1,
 html.theme-transitioning h2,
 html.theme-transitioning h3,
-html.theme-transitioning svg,
-html.theme-transitioning path,
-html.theme-transitioning circle,
-html.theme-transitioning line,
-html.theme-transitioning *::before,
-html.theme-transitioning *::after {
-  transition: background-color 380ms cubic-bezier(0.16, 1, 0.3, 1),
+html.theme-transitioning p,
+html.theme-transitioning span,
+html.theme-transitioning label {
+  transition: background 380ms cubic-bezier(0.16, 1, 0.3, 1),
+              background-color 380ms cubic-bezier(0.16, 1, 0.3, 1),
               border-color 380ms cubic-bezier(0.16, 1, 0.3, 1),
               color 380ms cubic-bezier(0.16, 1, 0.3, 1),
-              fill 380ms cubic-bezier(0.16, 1, 0.3, 1),
-              stroke 380ms cubic-bezier(0.16, 1, 0.3, 1),
-              box-shadow 380ms cubic-bezier(0.16, 1, 0.3, 1) !important;
-  transition-delay: 0s !important;
+              box-shadow 380ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Sliding navigation indicator preservation: ensure spatial transforms are NEVER blocked by theme transitions */
+html.theme-transitioning [data-nav-pill] {
+  transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1),
+              width 260ms cubic-bezier(0.16, 1, 0.3, 1),
+              background-color 380ms cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 380ms cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
 /* 
@@ -146,6 +155,11 @@ html.theme-transitioning *::after {
   border: 1px solid var(--border-default);
   box-shadow: var(--glass-shadow);
   position: relative;
+  transition: background 380ms cubic-bezier(0.16, 1, 0.3, 1),
+              background-color 380ms cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 380ms cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 380ms cubic-bezier(0.16, 1, 0.3, 1),
+              color 380ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .glass-card {
@@ -154,17 +168,20 @@ html.theme-transitioning *::after {
   -webkit-backdrop-filter: blur(16px) saturate(160%);
   border: 1px solid var(--border-default);
   box-shadow: var(--glass-shadow);
+  position: relative;
   transition: background 220ms cubic-bezier(0.16, 1, 0.3, 1),
+              background-color 380ms cubic-bezier(0.16, 1, 0.3, 1),
               border-color 220ms cubic-bezier(0.16, 1, 0.3, 1),
               transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
               box-shadow 220ms cubic-bezier(0.16, 1, 0.3, 1);
-  position: relative;
 }
 
-.glass-card:hover {
-  background: var(--card-surface-hover);
-  border-color: var(--border-strong);
-  box-shadow: var(--glass-shadow-hover);
+@media (hover: hover) and (pointer: fine) {
+  .glass-card:hover {
+    background: var(--card-surface-hover);
+    border-color: var(--border-strong);
+    box-shadow: var(--glass-shadow-hover);
+  }
 }
 
 .glass-pill {
@@ -289,17 +306,18 @@ html.dark ::-webkit-scrollbar-thumb:hover,
   background: rgba(255, 255, 255, 0.22);
 }
 
-/* Reduced Motion Support */
+/* Reduced Motion Support: disable disorienting spatial movement without breaking theme color transitions */
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
   }
   .animate-subtle-glint,
   .animate-page-enter,
   .animate-modal-enter {
     animation: none !important;
+  }
+  [data-nav-pill] {
+    transition: none !important;
   }
 }

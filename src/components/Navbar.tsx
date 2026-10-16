@@ -1,4 +1,4 @@
-import React, { useRef, useState, useLayoutEffect, useEffect } from 'react';
+import React, { useRef, useState, useLayoutEffect, useEffect, useCallback } from 'react';
 import { Film, Sparkles, FolderHeart, Sliders, Plus, Zap } from 'lucide-react';
 import { ApiStatus } from '../services/api';
 import { ThemeMode } from '../types';
@@ -33,6 +33,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   // Sliding pill for desktop navigation
   const desktopNavRef = useRef<HTMLDivElement>(null);
   const tabButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const isDesktopPillInitialized = useRef(false);
   const [desktopPill, setDesktopPill] = useState<{ left: number; width: number; ready: boolean }>({
     left: 0,
     width: 0,
@@ -42,56 +43,132 @@ export const Navbar: React.FC<NavbarProps> = ({
   // Sliding pill for mobile bottom navigation
   const mobileNavRef = useRef<HTMLDivElement>(null);
   const mobileButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const isMobilePillInitialized = useRef(false);
   const [mobilePill, setMobilePill] = useState<{ left: number; width: number; ready: boolean }>({
     left: 0,
     width: 0,
     ready: false,
   });
 
-  const updateDesktopPill = () => {
+  const updateDesktopPill = useCallback(() => {
     const activeBtn = tabButtonRefs.current[currentTab];
     const nav = desktopNavRef.current;
-    if (activeBtn && nav) {
-      const activeRect = activeBtn.getBoundingClientRect();
-      const navRect = nav.getBoundingClientRect();
-      setDesktopPill({
-        left: activeRect.left - navRect.left,
-        width: activeRect.width,
-        ready: true,
-      });
-    }
-  };
+    if (!activeBtn || !nav) return;
 
-  const updateMobilePill = () => {
+    const offsetLeft = activeBtn.offsetLeft;
+    const offsetWidth = activeBtn.offsetWidth;
+    const scrollLeft = nav.scrollLeft || 0;
+
+    if (offsetWidth > 0) {
+      const targetLeft = offsetLeft - scrollLeft;
+      setDesktopPill((prev) => {
+        if (prev.left === targetLeft && prev.width === offsetWidth && prev.ready) {
+          return prev;
+        }
+        return {
+          left: targetLeft,
+          width: offsetWidth,
+          ready: true,
+        };
+      });
+
+      if (!isDesktopPillInitialized.current) {
+        requestAnimationFrame(() => {
+          isDesktopPillInitialized.current = true;
+        });
+      }
+    }
+  }, [currentTab]);
+
+  const updateMobilePill = useCallback(() => {
     const activeBtn = mobileButtonRefs.current[currentTab];
     const nav = mobileNavRef.current;
-    if (activeBtn && nav) {
-      const activeRect = activeBtn.getBoundingClientRect();
-      const navRect = nav.getBoundingClientRect();
-      setMobilePill({
-        left: activeRect.left - navRect.left,
-        width: activeRect.width,
-        ready: true,
-      });
-    }
-  };
+    if (!activeBtn || !nav) return;
 
+    // Use deterministic offsetLeft relative to mobileNavRef (which has position: relative)
+    const offsetLeft = activeBtn.offsetLeft;
+    const offsetWidth = activeBtn.offsetWidth;
+    const scrollLeft = nav.scrollLeft || 0;
+
+    if (offsetWidth > 0) {
+      const targetLeft = offsetLeft - scrollLeft;
+      setMobilePill((prev) => {
+        if (prev.left === targetLeft && prev.width === offsetWidth && prev.ready) {
+          return prev;
+        }
+        return {
+          left: targetLeft,
+          width: offsetWidth,
+          ready: true,
+        };
+      });
+
+      if (!isMobilePillInitialized.current) {
+        requestAnimationFrame(() => {
+          isMobilePillInitialized.current = true;
+        });
+      }
+    }
+  }, [currentTab]);
+
+  // Synchronously compute initial and updated positions
   useLayoutEffect(() => {
     updateDesktopPill();
     updateMobilePill();
-  }, [currentTab, hasActiveProject, savedCount]);
+  }, [updateDesktopPill, updateMobilePill, hasActiveProject, savedCount]);
 
+  // Listen for viewport resize, orientation changes, layout reflows, and font readiness
   useEffect(() => {
-    const handleResize = () => {
-      updateDesktopPill();
-      updateMobilePill();
+    const handleRecalculate = () => {
+      requestAnimationFrame(() => {
+        updateDesktopPill();
+        updateMobilePill();
+      });
     };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [currentTab, hasActiveProject]);
+
+    // 1. Standard window & orientation events
+    window.addEventListener('resize', handleRecalculate, { passive: true });
+    window.addEventListener('orientationchange', handleRecalculate, { passive: true });
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleRecalculate);
+    }
+
+    // 2. ResizeObserver for precise container size tracking
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => {
+        handleRecalculate();
+      });
+      if (desktopNavRef.current) ro.observe(desktopNavRef.current);
+      if (mobileNavRef.current) ro.observe(mobileNavRef.current);
+    }
+
+    // 3. Horizontal scroll on mobile nav
+    const mobileNavEl = mobileNavRef.current;
+    if (mobileNavEl) {
+      mobileNavEl.addEventListener('scroll', handleRecalculate, { passive: true });
+    }
+
+    // 4. Web font load completion check
+    if (document.fonts?.ready) {
+      document.fonts.ready.then(handleRecalculate).catch(() => {});
+    }
+
+    return () => {
+      window.removeEventListener('resize', handleRecalculate);
+      window.removeEventListener('orientationchange', handleRecalculate);
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', handleRecalculate);
+      }
+      if (mobileNavEl) {
+        mobileNavEl.removeEventListener('scroll', handleRecalculate);
+      }
+      if (ro) ro.disconnect();
+    };
+  }, [updateDesktopPill, updateMobilePill]);
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-[var(--border-subtle)] bg-white/75 dark:bg-[#09090b]/80 backdrop-blur-2xl transition-colors duration-200">
+    <header className="sticky top-0 z-40 w-full border-b border-[var(--border-subtle)] bg-white/80 dark:bg-[#09090b]/85 backdrop-blur-2xl transition-colors duration-200">
       {/* Top subtle highlight refraction line */}
       <div
         className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-slate-300/40 dark:via-white/20 to-transparent"
@@ -105,6 +182,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => onSelectTab('home')}
             aria-label="FRAME AI Home"
             className="group flex items-center text-left focus:outline-none cursor-pointer transition-transform active:scale-95 duration-150"
+            style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
           >
             <Logo size={28} showWordmark={true} />
           </button>
@@ -118,10 +196,16 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Sliding Pill Indicator */}
             {desktopPill.ready && (
               <div
-                className="absolute top-1 bottom-1 rounded-full bg-slate-900 dark:bg-white/[0.14] border border-slate-900/10 dark:border-white/25 shadow-sm pointer-events-none transition-all duration-240 ease-liquid-spring"
+                data-nav-pill="desktop"
+                className="absolute left-0 top-1 bottom-1 rounded-full bg-slate-900 dark:bg-white/[0.14] border border-slate-900/10 dark:border-white/25 shadow-sm pointer-events-none"
                 style={{
-                  transform: `translateX(${desktopPill.left}px)`,
+                  transform: `translate3d(${desktopPill.left}px, 0, 0)`,
                   width: `${desktopPill.width}px`,
+                  transition: isDesktopPillInitialized.current
+                    ? 'transform 240ms cubic-bezier(0.16, 1, 0.3, 1), width 240ms cubic-bezier(0.16, 1, 0.3, 1)'
+                    : 'none',
+                  willChange: 'transform, width',
+                  WebkitBackfaceVisibility: 'hidden',
                 }}
               />
             )}
@@ -260,7 +344,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* New Creation Action Button with Apple-like tactile spring press */}
           <button
             onClick={onNewProject}
-            className="flex items-center space-x-1.5 rounded-full bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:hover:bg-zinc-100 dark:text-zinc-950 px-4 py-1.5 text-xs font-semibold shadow-sm transition-all duration-150 active:scale-[0.96] border border-[var(--border-subtle)] cursor-pointer"
+            className="flex items-center space-x-1.5 rounded-full bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:hover:bg-zinc-100 dark:text-zinc-950 px-3.5 sm:px-4 py-1.5 text-xs font-semibold shadow-sm transition-all duration-150 active:scale-[0.96] border border-[var(--border-subtle)] cursor-pointer"
+            style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
           >
             <Plus className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">New Script</span>
@@ -272,62 +357,74 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* Mobile Sliding Navigation Bar */}
       <div
         ref={mobileNavRef}
-        className="relative flex md:hidden border-t border-[var(--border-subtle)] bg-white/90 dark:bg-[#09090b]/90 backdrop-blur-2xl px-2 py-1 justify-around text-xs select-none"
+        className="relative flex md:hidden border-t border-[var(--border-subtle)] bg-white/90 dark:bg-[#09090b]/90 backdrop-blur-2xl px-2 py-1 justify-around text-xs select-none overflow-hidden"
       >
-        {/* Mobile Sliding Indicator Pill */}
+        {/* Mobile Sliding Indicator Pill: hardware accelerated with 3D transform */}
         {mobilePill.ready && (
           <div
-            className="absolute top-1 bottom-1 rounded-xl bg-slate-200/90 dark:bg-white/10 border border-[var(--border-subtle)] pointer-events-none transition-all duration-240 ease-liquid-spring"
+            data-nav-pill="mobile"
+            className="absolute left-0 top-1 bottom-1 rounded-xl bg-slate-900/[0.08] dark:bg-white/[0.14] border border-slate-900/10 dark:border-white/20 shadow-xs pointer-events-none"
             style={{
-              transform: `translateX(${mobilePill.left}px)`,
+              transform: `translate3d(${mobilePill.left}px, 0, 0)`,
               width: `${mobilePill.width}px`,
+              transition: isMobilePillInitialized.current
+                ? 'transform 260ms cubic-bezier(0.16, 1, 0.3, 1), width 260ms cubic-bezier(0.16, 1, 0.3, 1)'
+                : 'none',
+              willChange: 'transform, width',
+              WebkitBackfaceVisibility: 'hidden',
             }}
           />
         )}
 
+        {/* 1. Home Tab Button */}
         <button
           ref={(el) => {
             mobileButtonRefs.current['home'] = el;
           }}
           onClick={() => onSelectTab('home')}
-          className={`relative z-10 flex flex-col items-center py-1.5 px-3 rounded-lg transition-colors duration-200 ${
+          className={`relative z-10 flex flex-col items-center py-1.5 px-3 rounded-xl transition-colors duration-200 cursor-pointer ${
             currentTab === 'home'
               ? 'text-slate-900 dark:text-white font-semibold'
-              : 'text-slate-500 dark:text-zinc-400'
+              : 'text-slate-500 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-zinc-200'
           }`}
+          style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
         >
           <Sparkles className="h-4 w-4" />
           <span className="text-[10px] mt-0.5">Home</span>
         </button>
 
+        {/* 2. Studio Tab Button */}
         <button
           ref={(el) => {
             mobileButtonRefs.current['studio'] = el;
           }}
           onClick={() => onSelectTab('studio')}
           disabled={!hasActiveProject}
-          className={`relative z-10 flex flex-col items-center py-1.5 px-3 rounded-lg transition-colors duration-200 ${
+          className={`relative z-10 flex flex-col items-center py-1.5 px-3 rounded-xl transition-colors duration-200 ${
             !hasActiveProject
               ? 'opacity-40 cursor-not-allowed text-slate-400 dark:text-zinc-600'
               : currentTab === 'studio'
-              ? 'text-slate-900 dark:text-white font-semibold'
-              : 'text-slate-500 dark:text-zinc-400'
+              ? 'text-slate-900 dark:text-white font-semibold cursor-pointer'
+              : 'text-slate-500 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-zinc-200 cursor-pointer'
           }`}
+          style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
         >
           <Film className="h-4 w-4" />
           <span className="text-[10px] mt-0.5">Studio</span>
         </button>
 
+        {/* 3. My Creations Tab Button */}
         <button
           ref={(el) => {
             mobileButtonRefs.current['creations'] = el;
           }}
           onClick={() => onSelectTab('creations')}
-          className={`relative z-10 flex flex-col items-center py-1.5 px-3 rounded-lg transition-colors duration-200 ${
+          className={`relative z-10 flex flex-col items-center py-1.5 px-3 rounded-xl transition-colors duration-200 cursor-pointer ${
             currentTab === 'creations'
               ? 'text-slate-900 dark:text-white font-semibold'
-              : 'text-slate-500 dark:text-zinc-400'
+              : 'text-slate-500 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-zinc-200'
           }`}
+          style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
         >
           <FolderHeart className="h-4 w-4" />
           <span className="text-[10px] mt-0.5">
@@ -335,16 +432,18 @@ export const Navbar: React.FC<NavbarProps> = ({
           </span>
         </button>
 
+        {/* 4. Settings Tab Button */}
         <button
           ref={(el) => {
             mobileButtonRefs.current['settings'] = el;
           }}
           onClick={() => onSelectTab('settings')}
-          className={`relative z-10 flex flex-col items-center py-1.5 px-3 rounded-lg transition-colors duration-200 ${
+          className={`relative z-10 flex flex-col items-center py-1.5 px-3 rounded-xl transition-colors duration-200 cursor-pointer ${
             currentTab === 'settings'
               ? 'text-slate-900 dark:text-white font-semibold'
-              : 'text-slate-500 dark:text-zinc-400'
+              : 'text-slate-500 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-zinc-200'
           }`}
+          style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
         >
           <Sliders className="h-4 w-4" />
           <span className="text-[10px] mt-0.5">Settings</span>

@@ -17,15 +17,19 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
   const [isAnimatingRipple, setIsAnimatingRipple] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown on click outside
+  // Close dropdown on click or touch outside with passive listener for mobile Safari
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
+    const handlePointerOutside = (e: MouseEvent | TouchEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setIsOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('mousedown', handlePointerOutside);
+    document.addEventListener('touchstart', handlePointerOutside, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', handlePointerOutside);
+      document.removeEventListener('touchstart', handlePointerOutside);
+    };
   }, []);
 
   const triggerVisualFeedback = () => {
@@ -52,7 +56,11 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
   };
 
   // Immediate toggle between dark and light with coordinated fluid feedback
-  const handleToggle = () => {
+  const handleToggle = (e?: React.SyntheticEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     triggerVisualFeedback();
     const root = document.documentElement;
     const isCurrentlyDark = root.classList.contains('dark');
@@ -60,7 +68,11 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
     onSelectTheme(next);
   };
 
-  const handleSelectMode = (mode: ThemeMode) => {
+  const handleSelectMode = (mode: ThemeMode, e?: React.SyntheticEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     triggerVisualFeedback();
     onSelectTheme(mode);
     setIsOpen(false);
@@ -87,9 +99,10 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
         <button
           type="button"
           onClick={handleToggle}
-          aria-label={`Toggle appearance. Currently ${theme}. Click to switch between Light and Dark.`}
-          title={`Appearance: ${theme.toUpperCase()} (Click to toggle Light/Dark)`}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-zinc-200 hover:bg-slate-100/80 dark:hover:bg-white/10 transition-colors duration-150 active:scale-[0.96] cursor-pointer"
+          aria-label={`Toggle appearance. Currently ${theme}. Tap to switch between Light and Dark.`}
+          title={`Appearance: ${theme.toUpperCase()} (Tap to toggle Light/Dark)`}
+          className="flex items-center gap-1.5 px-3 py-1.5 min-h-[34px] text-xs font-medium text-slate-700 dark:text-zinc-200 hover:bg-slate-100/80 dark:hover:bg-white/10 transition-colors duration-150 active:scale-[0.96] cursor-pointer"
+          style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
         >
           <span className="shrink-0">{getIcon(theme)}</span>
           <span className="capitalize hidden sm:inline text-[11px] font-semibold tracking-wide">
@@ -100,10 +113,14 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
         {/* Dropdown Chevron Trigger for explicit selection */}
         <button
           type="button"
-          onClick={() => setIsOpen(!isOpen)}
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsOpen(!isOpen);
+          }}
           aria-label="Open appearance menu"
           title="Choose Light, Dark, or System mode"
-          className="px-2 py-1.5 border-l border-[var(--border-subtle)] text-slate-400 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-white hover:bg-slate-100/80 dark:hover:bg-white/10 transition-colors duration-150 cursor-pointer"
+          className="px-2 py-1.5 min-h-[34px] border-l border-[var(--border-subtle)] text-slate-400 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-white hover:bg-slate-100/80 dark:hover:bg-white/10 transition-colors duration-150 cursor-pointer"
+          style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
         >
           <ChevronDown
             className={`h-3 w-3 transition-transform duration-200 ease-liquid-spring ${
@@ -115,7 +132,10 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
 
       {/* Popover Menu for explicit Light / Dark / System selection with spring reveal */}
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-40 rounded-2xl bg-white/95 dark:bg-zinc-900/95 p-1.5 shadow-2xl border border-[var(--border-default)] z-50 animate-modal-enter text-xs backdrop-blur-2xl">
+        <div
+          className="absolute right-0 top-full mt-2 w-40 max-w-[calc(100vw-2rem)] rounded-2xl bg-white/95 dark:bg-zinc-900/95 p-1.5 shadow-2xl border border-[var(--border-default)] z-50 animate-modal-enter text-xs backdrop-blur-2xl"
+          style={{ WebkitTapHighlightColor: 'transparent' }}
+        >
           {/* Top highlight line */}
           <div
             className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/60 dark:via-white/30 to-transparent rounded-t-2xl"
@@ -132,12 +152,13 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
               <button
                 key={mode}
                 type="button"
-                onClick={() => handleSelectMode(mode)}
-                className={`w-full flex items-center justify-between rounded-xl px-2.5 py-2 text-left capitalize transition-all duration-150 cursor-pointer ${
+                onClick={(e) => handleSelectMode(mode, e)}
+                className={`w-full flex items-center justify-between rounded-xl px-2.5 py-2 text-left capitalize transition-all duration-150 cursor-pointer min-h-[36px] ${
                   isSelected
                     ? 'bg-slate-900 text-white dark:bg-white/15 dark:text-white font-semibold shadow-xs'
                     : 'text-slate-700 dark:text-zinc-300 hover:bg-slate-100/80 dark:hover:bg-white/5'
                 }`}
+                style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
               >
                 <div className="flex items-center gap-2">
                   <span>{getIcon(mode)}</span>

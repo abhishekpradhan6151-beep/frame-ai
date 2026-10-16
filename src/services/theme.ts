@@ -54,6 +54,15 @@ export function applyTheme(mode: ThemeMode, animateTransition = false) {
     root.style.colorScheme = 'light';
   }
 
+  // Update mobile browser chrome <meta name="theme-color"> for Safari & Chrome
+  if (typeof document !== 'undefined' && typeof document.querySelectorAll === 'function') {
+    const metaTags = document.querySelectorAll('meta[name="theme-color"]');
+    metaTags.forEach((tag) => {
+      tag.removeAttribute('media');
+      tag.setAttribute('content', isDark ? '#09090b' : '#f8fafc');
+    });
+  }
+
   // Dispatch custom event for UI components that want to trigger subtle micro-effects
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('frame-theme-changed', { detail: { mode, isDark } }));
@@ -78,14 +87,19 @@ export function useTheme() {
     // Initial mount without unnecessary full-page transition animation
     applyTheme(theme, false);
 
-    // If in system mode, listen to OS color scheme changes
+    // If in system mode, listen to OS color scheme changes with fallback for older iOS Safari
     if (theme === 'system' && typeof window !== 'undefined' && window.matchMedia) {
       const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
       const listener = () => {
         applyTheme('system', true);
       };
-      mediaQuery.addEventListener('change', listener);
-      return () => mediaQuery.removeEventListener('change', listener);
+      if (mediaQuery.addEventListener) {
+        mediaQuery.addEventListener('change', listener);
+        return () => mediaQuery.removeEventListener('change', listener);
+      } else if ((mediaQuery as any).addListener) {
+        (mediaQuery as any).addListener(listener);
+        return () => (mediaQuery as any).removeListener(listener);
+      }
     }
   }, [theme]);
 
