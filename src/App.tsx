@@ -37,6 +37,8 @@ export function App() {
     checkApiStatus().then(setApiStatus);
   }, []);
 
+  const [generationError, setGenerationError] = useState<string | null>(null);
+
   const handleGenerate = async (params: {
     idea: string;
     platform: Platform;
@@ -46,6 +48,7 @@ export function App() {
     customInstructions?: string;
   }) => {
     setIsGenerating(true);
+    setGenerationError(null);
     try {
       const newProj = await generateProject({
         ...params,
@@ -57,8 +60,11 @@ export function App() {
       setActiveProject(newProj);
       setSavedProjects(loadSavedProjects());
       setCurrentTab('studio');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Generation failed:', err);
+      setGenerationError(
+        err?.message || 'AI Generation request failed. Please check your backend connection or switch to Demo Mode in Settings.'
+      );
     } finally {
       setIsGenerating(false);
     }
@@ -158,6 +164,8 @@ export function App() {
             settings={settings}
             isAiLive={Boolean(apiStatus?.liveAiAvailable && !settings.preferDemoMode)}
             onNavigateToCreations={() => setCurrentTab('creations')}
+            generationError={generationError}
+            onClearGenerationError={() => setGenerationError(null)}
           />
         )}
 

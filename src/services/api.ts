@@ -25,20 +25,27 @@ export async function generateProject(req: GenerateRequest): Promise<VideoProjec
     });
 
     if (!res.ok) {
-      throw new Error(`Server returned ${res.status}`);
+      const errorJson = await res.json().catch(() => ({}));
+      throw new Error(errorJson.error || `Server returned status ${res.status}`);
     }
 
     const data: VideoProject = await res.json();
     return data;
-  } catch (err) {
-    return generateMockProject(
-      req.idea,
-      req.platform,
-      req.tone,
-      req.duration,
-      req.language,
-      req.customInstructions
-    );
+  } catch (err: any) {
+    // If the user explicitly chose Demo Blueprint mode, local deterministic generation is expected
+    if (req.preferDemo) {
+      return generateMockProject(
+        req.idea,
+        req.platform,
+        req.tone,
+        req.duration,
+        req.language,
+        req.customInstructions
+      );
+    }
+    // If user requested Live AI, do NOT silently swallow the error with canned templates
+    console.error('Live AI generation failed:', err);
+    throw err;
   }
 }
 

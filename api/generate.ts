@@ -1,0 +1,18 @@
+import { processGeneration } from '../src/server/geminiService';
+
+export default async function handler(req: any, res: any) {
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', ['POST']);
+    return res.status(405).json({ error: 'Method Not Allowed' });
+  }
+
+  try {
+    const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
+    const result = await processGeneration(body);
+    return res.status(result.statusCode || 200).json(result.project);
+  } catch (error: any) {
+    console.error('API /api/generate Error:', error);
+    const message = error?.message || 'Generation failed';
+    return res.status(500).json({ error: message });
+  }
+}

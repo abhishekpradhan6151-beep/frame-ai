@@ -1,0 +1,6 @@
+{
+  "summary": "Architectural plan to enable Vercel serverless deployment for FRAME's Gemini AI backend while preserving local Express development, zero secret leakage, and eliminating silent fallback masking.",
+  "updatedAt": "2026-10-17T04:05:35.164279488Z",
+  "requestFeedback": true,
+  "userFacing": true
+}

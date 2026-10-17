@@ -101,4 +101,5 @@ export interface QuickEditRequest {
   targetTone?: Tone;
   customInstruction?: string;
   targetSection?: 'hooks' | 'scenes' | 'captions' | 'ctas';
+  preferDemo?: boolean;
 }

@@ -27,6 +27,8 @@ interface HomeViewProps {
   settings: UserSettings;
   isAiLive: boolean;
   onNavigateToCreations?: () => void;
+  generationError?: string | null;
+  onClearGenerationError?: () => void;
 }
 
 const PLATFORM_DISPLAY_LABELS: Record<Platform, string> = {
@@ -50,6 +52,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
   isGenerating,
   settings,
   onNavigateToCreations,
+  generationError,
+  onClearGenerationError,
 }) => {
   const [idea, setIdea] = useState('');
   // Prefer Instagram Reel / Conversational default if available to match the requested presentation
@@ -192,10 +196,22 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </div>
 
             {/* Error Message if any */}
-            {error && (
-              <div className="flex items-center gap-2 text-xs text-rose-500 dark:text-rose-400 font-medium mb-3 animate-fade-in">
-                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                <span>{error}</span>
+            {(error || generationError) && (
+              <div className="flex items-center justify-between gap-2 text-xs text-rose-500 dark:text-rose-400 font-medium mb-3 p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 animate-fade-in">
+                <div className="flex items-center gap-2 min-w-0">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span className="break-words">{error || generationError}</span>
+                </div>
+                {generationError && onClearGenerationError && !error && (
+                  <button
+                    type="button"
+                    onClick={onClearGenerationError}
+                    aria-label="Dismiss error"
+                    className="text-rose-500 hover:text-rose-700 dark:hover:text-rose-300 font-bold px-1.5 py-0.5 rounded focus:outline-none"
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
             )}
 
