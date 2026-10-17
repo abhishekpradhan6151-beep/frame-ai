@@ -2,6 +2,23 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      // Gracefully prevent unhandled WebSocket rejection errors in iframe/Cloud Run environments where HMR is disabled
+      window.addEventListener('unhandledrejection', function(event) {
+        if (event && event.reason && (
+          (event.reason.message && event.reason.message.includes('WebSocket')) ||
+          (typeof event.reason === 'string' && event.reason.includes('WebSocket'))
+        )) {
+          event.preventDefault();
+        }
+      });
+      window.addEventListener('error', function(event) {
+        if (event && event.message && event.message.includes('WebSocket')) {
+          event.preventDefault();
+          return true;
+        }
+      });
+    </script>
     <!-- Inline theme script to prevent any flash of wrong theme -->
     <script>
       (function() {

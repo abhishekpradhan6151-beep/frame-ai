@@ -300,11 +300,18 @@ Return the updated project JSON with all fields preserved or updated appropriate
 // Dev server or static files setup
 async function startServer() {
   const isProd = process.env.NODE_ENV === 'production';
+  const http = await import('http');
+  const server = http.createServer(app);
 
   if (!isProd) {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: {
+          server,
+        },
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
@@ -315,7 +322,7 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, HOST, () => {
+  server.listen(PORT, HOST, () => {
     console.log(`FRAME server is live on http://${HOST}:${PORT}`);
   });
 }
