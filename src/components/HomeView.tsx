@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { Platform, Tone, DurationOption, UserSettings } from '../types';
 import { AVAILABLE_LANGUAGES } from '../services/templates';
-import { StandaloneApertureBadge } from './Logo';
+import { StandaloneGlassBadge } from './Logo';
 
 interface HomeViewProps {
   onGenerate: (data: {
@@ -138,7 +138,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const settingsSummary = `${platformName} · ${languageName} · ${toneName} · ${duration}s`;
 
   return (
-    <div className="relative min-h-[calc(100vh-4rem)] flex flex-col justify-between items-center px-4 py-12 sm:py-16 md:py-20 bg-slate-50 dark:bg-[#09090b] text-slate-900 dark:text-zinc-100 overflow-hidden select-none transition-colors duration-200">
+    <div className="relative min-h-[calc(100vh-5rem)] flex flex-col justify-between items-center px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 md:pt-10 pb-8 sm:pb-12 bg-slate-50 dark:bg-[#09090b] text-slate-900 dark:text-zinc-100 overflow-hidden select-none transition-colors duration-200">
       {/* Subtle tonal gradient and restrained lighting behind central content */}
       <div
         className="pointer-events-none absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[720px] max-w-[90vw] h-[400px] bg-gradient-to-b from-indigo-500/[0.04] via-slate-400/[0.02] to-transparent dark:from-indigo-500/[0.08] dark:via-zinc-500/[0.03] rounded-full blur-3xl transition-opacity duration-300"
@@ -146,27 +146,27 @@ export const HomeView: React.FC<HomeViewProps> = ({
       />
 
       {/* Main Centered Content */}
-      <div className="w-full max-w-2xl mx-auto flex flex-col items-center text-center relative z-10">
-        {/* 1. Standalone Aperture Badge */}
-        <div className="mb-6 transition-transform duration-300 hover:scale-[1.03]">
-          <StandaloneApertureBadge />
+      <div className="w-full max-w-[880px] mx-auto flex flex-col items-center text-center relative z-10">
+        {/* 1. Standalone Glass F Logo */}
+        <div className="mb-4 sm:mb-5">
+          <StandaloneGlassBadge size={56} />
         </div>
 
         {/* 2. Main Headline */}
-        <h1 className="text-3xl sm:text-5xl md:text-[54px] font-bold tracking-tight text-slate-900 dark:text-white leading-[1.12] max-w-xl transition-colors duration-200">
+        <h1 className="text-3xl sm:text-5xl md:text-[56px] lg:text-[60px] font-extrabold tracking-tight text-slate-900 dark:text-white leading-[1.1] max-w-2xl transition-colors duration-200">
           Your next video starts here.
         </h1>
 
         {/* 3. Subtitle */}
-        <p className="mt-3.5 text-sm sm:text-base md:text-lg text-slate-600 dark:text-zinc-400 font-normal tracking-normal max-w-md transition-colors duration-200">
+        <p className="mt-3 sm:mt-4 text-base sm:text-lg md:text-[19px] text-slate-600 dark:text-zinc-400 font-normal tracking-normal max-w-xl transition-colors duration-200 leading-relaxed">
           Turn an idea into content worth watching.
         </p>
 
         {/* 4. Main Generation Composer */}
-        <div className="w-full mt-10">
+        <div className="w-full mt-6 sm:mt-8 md:mt-9">
           <form
             onSubmit={handleSubmit}
-            className="w-full rounded-3xl bg-white/85 dark:bg-[#121217]/75 border border-[var(--border-default)] shadow-xl shadow-slate-200/50 dark:shadow-[0_1px_0_0_rgba(255,255,255,0.12)_inset,0_20px_48px_-6px_rgba(0,0,0,0.7)] backdrop-blur-2xl p-5 sm:p-7 relative transition-all duration-240 ease-liquid-spring focus-within:border-[var(--border-strong)] focus-within:shadow-2xl text-left"
+            className="w-full rounded-[28px] sm:rounded-[36px] bg-white/85 dark:bg-[#121217]/75 border border-[var(--border-default)] shadow-xl shadow-slate-200/50 dark:shadow-[0_1px_0_0_rgba(255,255,255,0.12)_inset,0_20px_48px_-6px_rgba(0,0,0,0.7)] backdrop-blur-2xl p-6 sm:p-8 md:p-9 relative transition-all duration-240 ease-liquid-spring focus-within:border-[var(--border-strong)] focus-within:shadow-2xl text-left"
           >
             {/* Delicate specular light reflection on top border */}
             <div
@@ -187,7 +187,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 placeholder="What do you want to create a video about?"
                 rows={3}
                 maxLength={800}
-                className="w-full resize-none bg-transparent text-sm sm:text-base text-slate-900 dark:text-zinc-100 placeholder-slate-400 dark:placeholder-zinc-500 focus:outline-none min-h-[100px] leading-relaxed select-text transition-colors duration-200"
+                className="w-full resize-none bg-transparent text-base sm:text-[17px] md:text-lg text-slate-900 dark:text-zinc-100 placeholder:text-slate-400/90 dark:placeholder:text-zinc-500 focus:outline-none min-h-[110px] sm:min-h-[125px] leading-relaxed select-text transition-colors duration-200"
               />
             </div>
 
@@ -200,8 +200,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
             )}
 
             {/* Quick Inspiration Pills */}
-            <div className="mt-3 flex flex-wrap items-center gap-1.5 pt-1">
-              <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-400 mr-1 hidden sm:inline">Try:</span>
+            <div className="mt-4 flex flex-wrap items-center gap-2 pt-1">
+              <span className="text-xs sm:text-[13px] font-semibold text-slate-500 dark:text-zinc-400 mr-1 hidden sm:inline">Try:</span>
               {[
                 '3 common mistakes beginners make in...',
                 'Stop doing this if you want to grow on...',
@@ -216,7 +216,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                     setError(null);
                     if (textareaRef.current) textareaRef.current.focus();
                   }}
-                  className="rounded-full px-2.5 py-1 text-[11px] text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white bg-slate-100/70 hover:bg-slate-200/80 dark:bg-white/[0.04] dark:hover:bg-white/[0.08] border border-[var(--border-subtle)] hover:border-[var(--border-default)] transition-all cursor-pointer truncate max-w-[240px] sm:max-w-none text-left"
+                  className="rounded-full px-3.5 py-1.5 text-xs sm:text-[13px] text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white bg-slate-100/70 hover:bg-slate-200/80 dark:bg-white/[0.04] dark:hover:bg-white/[0.08] border border-[var(--border-subtle)] hover:border-[var(--border-default)] transition-all cursor-pointer truncate max-w-[280px] sm:max-w-none text-left"
                 >
                   {suggestion}
                 </button>
@@ -224,33 +224,33 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </div>
 
             {/* Bottom Row: Settings Pill (Left) + Generate Button (Right) */}
-            <div className="pt-4 mt-3 border-t border-[var(--border-subtle)] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3.5 transition-colors duration-200">
+            <div className="pt-5 mt-4 border-t border-[var(--border-subtle)] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 transition-colors duration-200">
               {/* Bottom-left settings trigger */}
               <button
                 type="button"
                 onClick={handleOpenSettings}
                 aria-label={`Current settings: ${settingsSummary}. Click to adjust platform, language, tone, or duration.`}
-                className="group flex items-center gap-2 text-xs text-slate-600 hover:text-slate-900 border border-[var(--border-subtle)] bg-slate-100/70 hover:bg-slate-200/70 dark:text-zinc-400 dark:hover:text-zinc-200 dark:bg-white/[0.04] dark:hover:bg-white/[0.08] transition-all py-1.5 px-3 rounded-full active:scale-[0.98] self-start sm:self-auto"
+                className="group flex items-center gap-2.5 text-xs sm:text-sm text-slate-700 hover:text-slate-900 border border-[var(--border-subtle)] hover:border-[var(--border-default)] bg-slate-100/70 hover:bg-slate-200/70 dark:text-zinc-300 dark:hover:text-zinc-100 dark:bg-white/[0.04] dark:hover:bg-white/[0.08] transition-all py-2 sm:py-2.5 px-4 sm:px-4.5 rounded-full active:scale-[0.98] self-start sm:self-auto min-h-[42px] cursor-pointer"
               >
-                <SlidersHorizontal className="h-3.5 w-3.5 text-slate-500 dark:text-zinc-400 group-hover:text-slate-900 dark:group-hover:text-zinc-200 transition-colors shrink-0" />
-                <span className="font-normal tracking-wide truncate max-w-[280px] sm:max-w-xs">
+                <SlidersHorizontal className="h-4 w-4 text-slate-500 dark:text-zinc-400 group-hover:text-slate-900 dark:group-hover:text-zinc-100 transition-colors shrink-0" />
+                <span className="font-medium tracking-wide truncate max-w-[320px] sm:max-w-md">
                   {settingsSummary}
                 </span>
               </button>
 
               {/* Bottom-right Generate button */}
-              <div className="flex items-center gap-2 self-stretch sm:self-auto">
-                <span className="text-[10px] text-slate-500 dark:text-zinc-400 hidden lg:inline select-none">
+              <div className="flex items-center gap-2.5 self-stretch sm:self-auto">
+                <span className="text-xs text-slate-500 dark:text-zinc-400 hidden lg:inline select-none font-medium">
                   ⌘↵ to run
                 </span>
                 <button
                   type="submit"
                   disabled={isGenerating}
-                  className="rounded-full bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:hover:bg-zinc-100 dark:text-zinc-950 font-semibold px-5 py-2.5 text-xs sm:text-sm transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5 shrink-0 w-full sm:w-auto disabled:opacity-50 cursor-pointer border border-[var(--border-subtle)]"
+                  className="rounded-full bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:hover:bg-zinc-100 dark:text-zinc-950 font-semibold px-6 sm:px-7 py-3 sm:py-3.5 text-sm sm:text-base transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 shrink-0 w-full sm:w-auto min-h-[46px] sm:min-h-[48px] disabled:opacity-50 cursor-pointer border border-[var(--border-subtle)]"
                 >
                   {isGenerating ? (
                     <>
-                      <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
                       <span>Generating...</span>
                     </>
                   ) : (
@@ -267,7 +267,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
       </div>
 
       {/* 5. Recent Creations Footer Link */}
-      <div className="mt-12 mb-2 z-10 text-center">
+      <div className="mt-8 mb-2 z-10 text-center">
         {onNavigateToCreations ? (
           <button
             type="button"
@@ -346,14 +346,16 @@ export const HomeView: React.FC<HomeViewProps> = ({
                         key={pKey}
                         type="button"
                         onClick={() => setTempPlatform(pKey)}
-                        className={`rounded-2xl p-3 text-left border transition-all flex items-center justify-between ${
+                        className={`rounded-2xl p-3 text-left border transition-all duration-150 flex items-center justify-between cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50 active:scale-[0.98] ${
                           isSelected
-                            ? 'border-slate-900 bg-slate-900 text-white shadow-xs dark:border-white dark:bg-white/10 dark:text-white'
-                            : 'border-slate-200/80 bg-slate-50/80 text-slate-600 hover:text-slate-900 hover:border-slate-300 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:border-white/10'
+                            ? 'border-slate-900 bg-slate-900 text-white shadow-sm dark:border-white/80 dark:bg-white/15 dark:text-white'
+                            : 'border-slate-200/90 bg-slate-50/90 text-slate-700 hover:text-slate-900 hover:bg-slate-100/90 hover:border-slate-300 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-white/[0.06] dark:hover:border-white/15'
                         }`}
                       >
-                        <span className="text-xs font-medium">{PLATFORM_DISPLAY_LABELS[pKey]}</span>
-                        {isSelected && <Check className="h-3.5 w-3.5 text-white shrink-0" />}
+                        <span className={`text-xs ${isSelected ? 'font-semibold text-white' : 'font-medium text-slate-800 dark:text-zinc-200'}`}>
+                          {PLATFORM_DISPLAY_LABELS[pKey]}
+                        </span>
+                        {isSelected && <Check className="h-3.5 w-3.5 text-white shrink-0 ml-1.5" />}
                       </button>
                     );
                   })}
@@ -374,14 +376,19 @@ export const HomeView: React.FC<HomeViewProps> = ({
                         key={lang.code}
                         type="button"
                         onClick={() => setTempLanguage(lang.code)}
-                        className={`rounded-xl px-3 py-2 text-left border transition-all flex items-center justify-between text-xs ${
+                        className={`rounded-xl px-3 py-2 text-left border transition-all duration-150 flex items-center justify-between text-xs cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50 active:scale-[0.98] ${
                           isSelected
-                            ? 'border-slate-900 bg-slate-900 text-white shadow-xs font-semibold dark:border-white dark:bg-white/10 dark:text-white'
-                            : 'border-slate-200/80 bg-slate-50/80 text-slate-600 hover:text-slate-900 hover:border-slate-300 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:border-white/10'
+                            ? 'border-slate-900 bg-slate-900 text-white shadow-sm font-semibold dark:border-white/80 dark:bg-white/15 dark:text-white'
+                            : 'border-slate-200/90 bg-slate-50/90 text-slate-700 hover:text-slate-900 hover:bg-slate-100/90 hover:border-slate-300 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-white/[0.06] dark:hover:border-white/15'
                         }`}
                       >
-                        <span className="truncate">{lang.name.split(' ')[0]}</span>
-                        <span className="text-xs ml-1">{lang.flag}</span>
+                        <span className={`truncate ${isSelected ? 'font-semibold text-white' : 'font-medium text-slate-800 dark:text-zinc-200'}`}>
+                          {lang.name.split(' ')[0]}
+                        </span>
+                        <div className="flex items-center gap-1 ml-1 shrink-0">
+                          <span className="text-xs">{lang.flag}</span>
+                          {isSelected && <Check className="h-3 w-3 text-white shrink-0" />}
+                        </div>
                       </button>
                     );
                   })}
@@ -403,17 +410,33 @@ export const HomeView: React.FC<HomeViewProps> = ({
                         key={tKey}
                         type="button"
                         onClick={() => setTempTone(tKey)}
-                        className={`rounded-2xl p-3 text-left border transition-all flex flex-col justify-between ${
+                        className={`rounded-2xl p-3 text-left border transition-all duration-150 flex flex-col justify-between cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50 active:scale-[0.98] ${
                           isSelected
-                            ? 'border-slate-900 bg-slate-900 text-white shadow-xs dark:border-white dark:bg-white/10 dark:text-white'
-                            : 'border-slate-200/80 bg-slate-50/80 text-slate-600 hover:text-slate-900 hover:border-slate-300 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:border-white/10'
+                            ? 'border-slate-900 bg-slate-900 text-white shadow-sm dark:border-white/80 dark:bg-white/15 dark:text-white'
+                            : 'border-slate-200/90 bg-slate-50/90 text-slate-700 hover:text-slate-900 hover:bg-slate-100/90 hover:border-slate-300 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-white/[0.06] dark:hover:border-white/15'
                         }`}
                       >
                         <div className="flex items-center justify-between w-full mb-1">
-                          <span className="text-xs font-medium text-slate-900 dark:text-white">{item.label}</span>
-                          {isSelected && <Check className="h-3.5 w-3.5 text-white shrink-0" />}
+                          <span
+                            className={`text-xs ${
+                              isSelected
+                                ? 'font-semibold text-white'
+                                : 'font-medium text-slate-900 dark:text-zinc-100'
+                            }`}
+                          >
+                            {item.label}
+                          </span>
+                          {isSelected && <Check className="h-3.5 w-3.5 text-white shrink-0 ml-1.5" />}
                         </div>
-                        <span className="text-[10px] text-slate-500 dark:text-zinc-500 line-clamp-1">{item.desc}</span>
+                        <span
+                          className={`text-[10px] line-clamp-1 ${
+                            isSelected
+                              ? 'text-slate-300 dark:text-zinc-300 font-normal'
+                              : 'text-slate-500 dark:text-zinc-400'
+                          }`}
+                        >
+                          {item.desc}
+                        </span>
                       </button>
                     );
                   })}
@@ -434,13 +457,13 @@ export const HomeView: React.FC<HomeViewProps> = ({
                         key={d}
                         type="button"
                         onClick={() => setTempDuration(d)}
-                        className={`rounded-xl py-2 text-center text-xs font-bold border transition-all ${
+                        className={`rounded-xl py-2 text-center text-xs font-bold border transition-all duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50 active:scale-[0.98] ${
                           isSelected
-                            ? 'border-slate-900 bg-slate-900 text-white shadow-xs dark:border-white dark:bg-white/15 dark:text-white'
-                            : 'border-slate-200/80 bg-slate-50/80 text-slate-600 hover:text-slate-900 hover:border-slate-300 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:border-white/10'
+                            ? 'border-slate-900 bg-slate-900 text-white shadow-sm dark:border-white/80 dark:bg-white/15 dark:text-white'
+                            : 'border-slate-200/90 bg-slate-50/90 text-slate-700 hover:text-slate-900 hover:bg-slate-100/90 hover:border-slate-300 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-white/[0.06] dark:hover:border-white/15'
                         }`}
                       >
-                        {d}s
+                        <span className={isSelected ? 'text-white font-bold' : 'text-slate-700 dark:text-zinc-300'}>{d}s</span>
                       </button>
                     );
                   })}

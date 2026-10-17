@@ -37,20 +37,20 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
     setTimeout(() => setIsAnimatingRipple(false), 500);
   };
 
-  const getIcon = (mode: ThemeMode) => {
+  const getIcon = (mode: ThemeMode, isSelected?: boolean) => {
     switch (mode) {
       case 'light':
         return (
-          <Sun className="h-3.5 w-3.5 text-amber-500 transition-transform duration-300 rotate-0 hover:rotate-45" />
+          <Sun className={`h-4 w-4 sm:h-[18px] sm:w-[18px] ${isSelected ? 'text-amber-400' : 'text-amber-500'} transition-transform duration-300 rotate-0 hover:rotate-45`} />
         );
       case 'dark':
         return (
-          <Moon className="h-3.5 w-3.5 text-indigo-400 transition-transform duration-300 -rotate-12 hover:rotate-0" />
+          <Moon className={`h-4 w-4 sm:h-[18px] sm:w-[18px] ${isSelected ? 'text-indigo-300' : 'text-indigo-400'} transition-transform duration-300 -rotate-12 hover:rotate-0`} />
         );
       case 'system':
       default:
         return (
-          <Monitor className="h-3.5 w-3.5 text-slate-500 dark:text-zinc-400 transition-transform duration-300" />
+          <Monitor className={`h-4 w-4 sm:h-[18px] sm:w-[18px] ${isSelected ? 'text-slate-200 dark:text-zinc-200' : 'text-slate-500 dark:text-zinc-400'} transition-transform duration-300`} />
         );
     }
   };
@@ -101,11 +101,11 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
           onClick={handleToggle}
           aria-label={`Toggle appearance. Currently ${theme}. Tap to switch between Light and Dark.`}
           title={`Appearance: ${theme.toUpperCase()} (Tap to toggle Light/Dark)`}
-          className="flex items-center gap-1.5 px-3 py-1.5 min-h-[34px] text-xs font-medium text-slate-700 dark:text-zinc-200 hover:bg-slate-100/80 dark:hover:bg-white/10 transition-colors duration-150 active:scale-[0.96] cursor-pointer"
+          className="flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 min-h-[42px] sm:min-h-[44px] text-xs sm:text-sm font-medium text-slate-700 dark:text-zinc-200 hover:bg-slate-100/80 dark:hover:bg-white/10 transition-colors duration-150 active:scale-[0.96] cursor-pointer"
           style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
         >
           <span className="shrink-0">{getIcon(theme)}</span>
-          <span className="capitalize hidden sm:inline text-[11px] font-semibold tracking-wide">
+          <span className="capitalize hidden sm:inline text-xs sm:text-[13px] font-semibold tracking-wide">
             {theme}
           </span>
         </button>
@@ -119,11 +119,11 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
           }}
           aria-label="Open appearance menu"
           title="Choose Light, Dark, or System mode"
-          className="px-2 py-1.5 min-h-[34px] border-l border-[var(--border-subtle)] text-slate-400 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-white hover:bg-slate-100/80 dark:hover:bg-white/10 transition-colors duration-150 cursor-pointer"
+          className="px-2.5 sm:px-3 py-2 sm:py-2.5 min-h-[42px] sm:min-h-[44px] border-l border-[var(--border-subtle)] text-slate-400 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-white hover:bg-slate-100/80 dark:hover:bg-white/10 transition-colors duration-150 cursor-pointer"
           style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
         >
           <ChevronDown
-            className={`h-3 w-3 transition-transform duration-200 ease-liquid-spring ${
+            className={`h-3.5 w-3.5 transition-transform duration-200 ease-liquid-spring ${
               isOpen ? 'rotate-180' : ''
             }`}
           />
@@ -161,10 +161,10 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
                 style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
               >
                 <div className="flex items-center gap-2">
-                  <span>{getIcon(mode)}</span>
-                  <span>{mode}</span>
+                  <span>{getIcon(mode, isSelected)}</span>
+                  <span className={isSelected ? 'text-white font-semibold' : 'text-slate-700 dark:text-zinc-300'}>{mode}</span>
                 </div>
-                {isSelected && <Check className="h-3.5 w-3.5 text-current shrink-0" />}
+                {isSelected && <Check className="h-3.5 w-3.5 text-white shrink-0" />}
               </button>
             );
           })}

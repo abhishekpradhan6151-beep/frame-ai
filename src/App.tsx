@@ -14,7 +14,7 @@ import {
 } from './services/storage';
 import { checkApiStatus, generateProject, quickEditProject, ApiStatus } from './services/api';
 import { useTheme } from './services/theme';
-import { Logo } from './components/Logo';
+import { BrandLockup } from './components/Logo';
 
 export function App() {
   const [currentTab, setCurrentTab] = useState<'home' | 'studio' | 'creations' | 'settings'>('home');
@@ -199,15 +199,10 @@ export function App() {
 
       {/* Minimalist Liquid Glass Footer for non-home pages */}
       {currentTab !== 'home' && (
-        <footer className="border-t border-slate-200/80 dark:border-white/[0.08] bg-white/60 dark:bg-zinc-950/60 backdrop-blur-md py-6 px-4 text-center text-xs text-slate-500 dark:text-zinc-400">
-          <div className="mx-auto max-w-7xl flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="flex items-center space-x-2.5">
-              <Logo size={20} showWordmark={false} />
-              <span className="font-semibold text-slate-800 dark:text-zinc-300">FRAME AI</span>
-              <span>—</span>
-              <span>Short-Form Studio</span>
-            </div>
-            <div className="text-[11px] text-slate-500 dark:text-zinc-400">
+        <footer className="border-t border-slate-200/80 dark:border-white/[0.08] bg-white/70 dark:bg-zinc-950/70 backdrop-blur-md py-5 sm:py-6 px-4 sm:px-6 lg:px-8 text-center text-xs text-slate-500 dark:text-zinc-400 transition-colors duration-200">
+          <div className="mx-auto max-w-7xl flex flex-col sm:flex-row items-center justify-between gap-4">
+            <BrandLockup iconSize={28} />
+            <div className="text-xs text-slate-500 dark:text-zinc-400 font-medium">
               TikTok, Reels & Shorts • Powered by Google Gemini 3.8
             </div>
           </div>

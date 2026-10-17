@@ -175,7 +175,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         aria-hidden="true"
       />
 
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex h-[72px] sm:h-20 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Brand / Logo Zone */}
         <div className="flex items-center space-x-6 sm:space-x-8">
           <button
@@ -184,20 +184,20 @@ export const Navbar: React.FC<NavbarProps> = ({
             className="group flex items-center text-left focus:outline-none cursor-pointer transition-transform active:scale-95 duration-150"
             style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
           >
-            <Logo size={28} showWordmark={true} />
+            <Logo size={40} showWordmark={true} className="scale-[0.88] sm:scale-100 origin-left" />
           </button>
 
           {/* Desktop Sliding Navigation Bar */}
           <nav
             ref={desktopNavRef}
-            className="relative hidden md:flex items-center p-1 rounded-full bg-slate-100/80 dark:bg-zinc-900/60 border border-[var(--border-subtle)] backdrop-blur-xl shadow-xs"
+            className="relative hidden md:flex items-center p-1.5 rounded-full bg-slate-100/80 dark:bg-zinc-900/60 border border-[var(--border-subtle)] backdrop-blur-xl shadow-xs"
             aria-label="Main Navigation"
           >
             {/* Sliding Pill Indicator */}
             {desktopPill.ready && (
               <div
                 data-nav-pill="desktop"
-                className="absolute left-0 top-1 bottom-1 rounded-full bg-slate-900 dark:bg-white/[0.14] border border-slate-900/10 dark:border-white/25 shadow-sm pointer-events-none"
+                className="absolute left-0 top-1.5 bottom-1.5 rounded-full bg-slate-900 dark:bg-white/[0.14] border border-slate-900/10 dark:border-white/25 shadow-sm pointer-events-none"
                 style={{
                   transform: `translate3d(${desktopPill.left}px, 0, 0)`,
                   width: `${desktopPill.width}px`,
@@ -216,14 +216,14 @@ export const Navbar: React.FC<NavbarProps> = ({
                 tabButtonRefs.current['home'] = el;
               }}
               onClick={() => onSelectTab('home')}
-              className={`relative z-10 flex items-center space-x-2 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors duration-200 cursor-pointer ${
+              className={`relative z-10 flex items-center space-x-2 rounded-full px-4 sm:px-5 py-2 sm:py-2.5 text-sm sm:text-[15px] font-semibold transition-colors duration-200 cursor-pointer min-h-[42px] ${
                 currentTab === 'home'
-                  ? 'text-white dark:text-white font-semibold'
+                  ? 'text-white dark:text-white'
                   : 'text-slate-600 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-zinc-200'
               }`}
             >
               <Sparkles
-                className={`h-3.5 w-3.5 transition-colors duration-200 ${
+                className={`h-4 w-4 sm:h-[18px] sm:w-[18px] transition-colors duration-200 ${
                   currentTab === 'home' ? 'text-white' : 'text-slate-400 dark:text-zinc-500'
                 }`}
               />
@@ -237,19 +237,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                   tabButtonRefs.current['studio'] = el;
                 }}
                 onClick={() => onSelectTab('studio')}
-                className={`relative z-10 flex items-center space-x-2 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors duration-200 cursor-pointer ${
+                className={`relative z-10 flex items-center space-x-2 rounded-full px-4 sm:px-5 py-2 sm:py-2.5 text-sm sm:text-[15px] font-semibold transition-colors duration-200 cursor-pointer min-h-[42px] ${
                   currentTab === 'studio'
-                    ? 'text-white dark:text-white font-semibold'
+                    ? 'text-white dark:text-white'
                     : 'text-slate-600 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-zinc-200'
                 }`}
               >
                 <Film
-                  className={`h-3.5 w-3.5 transition-colors duration-200 ${
+                  className={`h-4 w-4 sm:h-[18px] sm:w-[18px] transition-colors duration-200 ${
                     currentTab === 'studio' ? 'text-white' : 'text-slate-400 dark:text-zinc-500'
                   }`}
                 />
                 <span>Studio</span>
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-xs" />
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-xs ml-0.5" />
               </button>
             )}
 
@@ -259,21 +259,21 @@ export const Navbar: React.FC<NavbarProps> = ({
                 tabButtonRefs.current['creations'] = el;
               }}
               onClick={() => onSelectTab('creations')}
-              className={`relative z-10 flex items-center space-x-2 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors duration-200 cursor-pointer ${
+              className={`relative z-10 flex items-center space-x-2 rounded-full px-4 sm:px-5 py-2 sm:py-2.5 text-sm sm:text-[15px] font-semibold transition-colors duration-200 cursor-pointer min-h-[42px] ${
                 currentTab === 'creations'
-                  ? 'text-white dark:text-white font-semibold'
+                  ? 'text-white dark:text-white'
                   : 'text-slate-600 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-zinc-200'
               }`}
             >
               <FolderHeart
-                className={`h-3.5 w-3.5 transition-colors duration-200 ${
+                className={`h-4 w-4 sm:h-[18px] sm:w-[18px] transition-colors duration-200 ${
                   currentTab === 'creations' ? 'text-white' : 'text-slate-400 dark:text-zinc-500'
                 }`}
               />
               <span>My Creations</span>
               {savedCount > 0 && (
                 <span
-                  className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono transition-colors ${
+                  className={`rounded-full px-2 py-0.5 text-xs font-mono font-bold transition-colors ml-1 ${
                     currentTab === 'creations'
                       ? 'bg-white/20 text-white'
                       : 'bg-slate-200/80 dark:bg-white/10 text-slate-700 dark:text-zinc-300'
@@ -290,14 +290,14 @@ export const Navbar: React.FC<NavbarProps> = ({
                 tabButtonRefs.current['settings'] = el;
               }}
               onClick={() => onSelectTab('settings')}
-              className={`relative z-10 flex items-center space-x-2 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors duration-200 cursor-pointer ${
+              className={`relative z-10 flex items-center space-x-2 rounded-full px-4 sm:px-5 py-2 sm:py-2.5 text-sm sm:text-[15px] font-semibold transition-colors duration-200 cursor-pointer min-h-[42px] ${
                 currentTab === 'settings'
-                  ? 'text-white dark:text-white font-semibold'
+                  ? 'text-white dark:text-white'
                   : 'text-slate-600 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-zinc-200'
               }`}
             >
               <Sliders
-                className={`h-3.5 w-3.5 transition-colors duration-200 ${
+                className={`h-4 w-4 sm:h-[18px] sm:w-[18px] transition-colors duration-200 ${
                   currentTab === 'settings' ? 'text-white' : 'text-slate-400 dark:text-zinc-500'
                 }`}
               />
@@ -307,7 +307,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Right Side: Theme Switch + Status Badge + New Button */}
-        <div className="flex items-center space-x-2.5 sm:space-x-3">
+        <div className="flex items-center space-x-2.5 sm:space-x-3.5">
           {/* Theme Toggle with smooth animations */}
           <ThemeToggle theme={theme} onSelectTheme={onSelectTheme} />
 
@@ -318,21 +318,21 @@ export const Navbar: React.FC<NavbarProps> = ({
                 ? 'Server is connected to Google Gemini 3.8 Flash SDK'
                 : 'Demo Mode: Deterministic sample creator blueprints active'
             }
-            className={`hidden sm:flex items-center space-x-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium backdrop-blur-md transition-all ${
+            className={`hidden lg:flex items-center space-x-2 rounded-full border px-3.5 py-2 min-h-[42px] sm:min-h-[44px] text-xs font-semibold backdrop-blur-md transition-all ${
               isLive
                 ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shadow-xs'
                 : 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400 shadow-xs'
             }`}
           >
             <span
-              className={`h-1.5 w-1.5 rounded-full ${
+              className={`h-2 w-2 rounded-full ${
                 isLive ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
               }`}
             />
-            <span className="flex items-center gap-1 font-medium">
+            <span className="flex items-center gap-1.5 font-semibold">
               {isLive ? (
                 <>
-                  <Zap className="h-3 w-3" />
+                  <Zap className="h-3.5 w-3.5" />
                   <span>Gemini Live</span>
                 </>
               ) : (
@@ -344,12 +344,12 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* New Creation Action Button with Apple-like tactile spring press */}
           <button
             onClick={onNewProject}
-            className="flex items-center space-x-1.5 rounded-full bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:hover:bg-zinc-100 dark:text-zinc-950 px-3.5 sm:px-4 py-1.5 text-xs font-semibold shadow-sm transition-all duration-150 active:scale-[0.96] border border-[var(--border-subtle)] cursor-pointer"
+            className="flex items-center space-x-2 rounded-full bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:hover:bg-zinc-100 dark:text-zinc-950 px-4 sm:px-5 py-2 sm:py-2.5 min-h-[42px] sm:min-h-[44px] text-xs sm:text-sm font-semibold shadow-sm transition-all duration-150 active:scale-[0.96] border border-[var(--border-subtle)] cursor-pointer"
             style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
           >
-            <Plus className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">New Script</span>
-            <span className="sm:hidden">New</span>
+            <Plus className="h-4 w-4 sm:h-[18px] sm:w-[18px]" />
+            <span className="hidden sm:inline font-semibold">New Script</span>
+            <span className="sm:hidden font-semibold">New</span>
           </button>
         </div>
       </div>
@@ -382,15 +382,15 @@ export const Navbar: React.FC<NavbarProps> = ({
             mobileButtonRefs.current['home'] = el;
           }}
           onClick={() => onSelectTab('home')}
-          className={`relative z-10 flex flex-col items-center py-1.5 px-3 rounded-xl transition-colors duration-200 cursor-pointer ${
+          className={`relative z-10 flex flex-col items-center py-2 px-3.5 rounded-xl transition-colors duration-200 cursor-pointer min-h-[48px] justify-center ${
             currentTab === 'home'
               ? 'text-slate-900 dark:text-white font-semibold'
               : 'text-slate-500 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-zinc-200'
           }`}
           style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
         >
-          <Sparkles className="h-4 w-4" />
-          <span className="text-[10px] mt-0.5">Home</span>
+          <Sparkles className="h-[18px] w-[18px]" />
+          <span className="text-xs mt-0.5">Home</span>
         </button>
 
         {/* 2. Studio Tab Button */}
@@ -400,7 +400,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           }}
           onClick={() => onSelectTab('studio')}
           disabled={!hasActiveProject}
-          className={`relative z-10 flex flex-col items-center py-1.5 px-3 rounded-xl transition-colors duration-200 ${
+          className={`relative z-10 flex flex-col items-center py-2 px-3.5 rounded-xl transition-colors duration-200 min-h-[48px] justify-center ${
             !hasActiveProject
               ? 'opacity-40 cursor-not-allowed text-slate-400 dark:text-zinc-600'
               : currentTab === 'studio'
@@ -409,8 +409,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           }`}
           style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
         >
-          <Film className="h-4 w-4" />
-          <span className="text-[10px] mt-0.5">Studio</span>
+          <Film className="h-[18px] w-[18px]" />
+          <span className="text-xs mt-0.5">Studio</span>
         </button>
 
         {/* 3. My Creations Tab Button */}
@@ -419,15 +419,15 @@ export const Navbar: React.FC<NavbarProps> = ({
             mobileButtonRefs.current['creations'] = el;
           }}
           onClick={() => onSelectTab('creations')}
-          className={`relative z-10 flex flex-col items-center py-1.5 px-3 rounded-xl transition-colors duration-200 cursor-pointer ${
+          className={`relative z-10 flex flex-col items-center py-2 px-3.5 rounded-xl transition-colors duration-200 cursor-pointer min-h-[48px] justify-center ${
             currentTab === 'creations'
               ? 'text-slate-900 dark:text-white font-semibold'
               : 'text-slate-500 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-zinc-200'
           }`}
           style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
         >
-          <FolderHeart className="h-4 w-4" />
-          <span className="text-[10px] mt-0.5">
+          <FolderHeart className="h-[18px] w-[18px]" />
+          <span className="text-xs mt-0.5">
             Creations{savedCount > 0 ? ` (${savedCount})` : ''}
           </span>
         </button>
@@ -438,15 +438,15 @@ export const Navbar: React.FC<NavbarProps> = ({
             mobileButtonRefs.current['settings'] = el;
           }}
           onClick={() => onSelectTab('settings')}
-          className={`relative z-10 flex flex-col items-center py-1.5 px-3 rounded-xl transition-colors duration-200 cursor-pointer ${
+          className={`relative z-10 flex flex-col items-center py-2 px-3.5 rounded-xl transition-colors duration-200 cursor-pointer min-h-[48px] justify-center ${
             currentTab === 'settings'
               ? 'text-slate-900 dark:text-white font-semibold'
               : 'text-slate-500 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-zinc-200'
           }`}
           style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
         >
-          <Sliders className="h-4 w-4" />
-          <span className="text-[10px] mt-0.5">Settings</span>
+          <Sliders className="h-[18px] w-[18px]" />
+          <span className="text-xs mt-0.5">Settings</span>
         </button>
       </div>
     </header>
