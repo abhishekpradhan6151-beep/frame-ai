@@ -1,4 +1,4 @@
-import { processQuickEdit } from '../src/server/geminiService';
+import { processQuickEdit } from './_lib/geminiService';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {

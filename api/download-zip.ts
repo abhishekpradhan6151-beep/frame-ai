@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { getZipFilePath } from '../src/server/geminiService';
+import { getZipFilePath } from './_lib/geminiService';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'GET' && req.method !== 'POST') {

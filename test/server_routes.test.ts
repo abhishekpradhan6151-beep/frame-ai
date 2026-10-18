@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import fs from 'fs';
+import path from 'path';
 import {
   getStatus,
   getZipFilePath,
@@ -222,3 +224,67 @@ describe('Vercel Serverless Function Endpoints (/api)', () => {
     expect(res._getHeaders()['Content-Type']).toBe('application/zip');
   });
 });
+
+describe('Vercel Serverless Function Module Resolution & Bundling Regression Tests', () => {
+  const routes = ['status.ts', 'generate.ts', 'quick-edit.ts', 'download-zip.ts'];
+
+  it('all four API route files import from ./_lib/geminiService and NOT unbundled ../src/server', () => {
+    for (const route of routes) {
+      const filePath = path.resolve(process.cwd(), 'api', route);
+      expect(fs.existsSync(filePath)).toBe(true);
+      const content = fs.readFileSync(filePath, 'utf-8');
+      expect(content).not.toContain('../src/server/geminiService');
+      expect(content).toContain('./_lib/geminiService');
+    }
+  });
+
+  it('src/server/geminiService.ts exists and re-exports the shared service for local server and tools', () => {
+    const srcPath = path.resolve(process.cwd(), 'src/server/geminiService.ts');
+    expect(fs.existsSync(srcPath)).toBe(true);
+    expect(typeof getStatus).toBe('function');
+    expect(typeof processGeneration).toBe('function');
+    expect(typeof processQuickEdit).toBe('function');
+    expect(typeof getZipFilePath).toBe('function');
+  });
+
+  it('verifies all API routes can be built for Vercel without ERR_MODULE_NOT_FOUND', async () => {
+    const { build } = await import('esbuild');
+    const outDir = path.resolve(process.cwd(), 'node_modules/.cache/vercel-build-test');
+
+    const entryPoints = routes.map((r) => path.resolve(process.cwd(), 'api', r));
+    const buildResult = await build({
+      entryPoints,
+      bundle: true,
+      platform: 'node',
+      format: 'esm',
+      packages: 'external',
+      outdir: outDir,
+      write: true,
+    });
+
+    expect(buildResult.errors.length).toBe(0);
+
+    for (const route of routes) {
+      const jsName = route.replace('.ts', '.js');
+      const builtPath = path.resolve(outDir, jsName);
+      expect(fs.existsSync(builtPath)).toBe(true);
+      const bundledCode = fs.readFileSync(builtPath, 'utf-8');
+
+      // Verify the shared service code is bundled in, and no dangling references exist
+      expect(bundledCode).not.toContain('/src/server/geminiService');
+      expect(bundledCode).not.toContain('../src/server/geminiService');
+      expect(bundledCode).not.toContain('./_lib/geminiService');
+    }
+
+    // Verify the bundled status function runs in Node without ERR_MODULE_NOT_FOUND
+    const bundledStatusPath = path.resolve(outDir, 'status.js');
+    const bundledModule = await import(bundledStatusPath + `?t=${Date.now()}`);
+    expect(typeof bundledModule.default).toBe('function');
+
+    const { req, res } = createMockReqRes({ method: 'GET' });
+    await bundledModule.default(req, res);
+    expect(res._getStatusCode()).toBe(200);
+    expect(res._getJson()).toHaveProperty('model', 'gemini-3.8-flash');
+  });
+});
+

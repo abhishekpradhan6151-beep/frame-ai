@@ -1,5 +1,10 @@
 {
   "framework": "vite",
+  "functions": {
+    "api/*.ts": {
+      "includeFiles": "{frame-ai.zip,public/frame-ai.zip}"
+    }
+  },
   "rewrites": [
     {
       "source": "/api/(.*)",
