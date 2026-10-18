@@ -4,7 +4,7 @@ import {
   getZipFilePath,
   processGeneration,
   processQuickEdit,
-} from './src/server/geminiService';
+} from './api/_lib/geminiService';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;

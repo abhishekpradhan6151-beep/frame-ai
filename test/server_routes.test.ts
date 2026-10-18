@@ -7,7 +7,7 @@ import {
   processGeneration,
   processQuickEdit,
   sanitizeError,
-} from '../src/server/geminiService';
+} from '../api/_lib/geminiService';
 import statusHandler from '../api/status';
 import generateHandler from '../api/generate';
 import quickEditHandler from '../api/quick-edit';
@@ -264,9 +264,11 @@ describe('Vercel Serverless Function Module Resolution & Bundling Regression Tes
     }
   });
 
-  it('src/server/geminiService.ts exists and re-exports the shared service for local server and tools', () => {
+  it('api/_lib/geminiService.ts exists as the single source of truth and ambiguous src/server re-export is removed', () => {
+    const libPath = path.resolve(process.cwd(), 'api/_lib/geminiService.ts');
+    expect(fs.existsSync(libPath)).toBe(true);
     const srcPath = path.resolve(process.cwd(), 'src/server/geminiService.ts');
-    expect(fs.existsSync(srcPath)).toBe(true);
+    expect(fs.existsSync(srcPath)).toBe(false);
     expect(typeof getStatus).toBe('function');
     expect(typeof processGeneration).toBe('function');
     expect(typeof processQuickEdit).toBe('function');
@@ -311,6 +313,22 @@ describe('Vercel Serverless Function Module Resolution & Bundling Regression Tes
     await bundledModule.default(req, res);
     expect(res._getStatusCode()).toBe(200);
     expect(res._getJson()).toHaveProperty('model', 'gemini-3.8-flash');
+
+    // Verify the bundled generate function runs in Node without ERR_MODULE_NOT_FOUND
+    const bundledGenPath = path.resolve(outDir, 'generate.js');
+    const bundledGenModule = await import(bundledGenPath + `?t=${Date.now()}`);
+    expect(typeof bundledGenModule.default).toBe('function');
+
+    const { req: genReq, res: genRes } = createMockReqRes({
+      method: 'POST',
+      body: {
+        idea: 'Bundled serverless test',
+        preferDemo: true,
+      },
+    });
+    await bundledGenModule.default(genReq, genRes);
+    expect(genRes._getStatusCode()).toBe(200);
+    expect(genRes._getJson()).toHaveProperty('title');
   });
 });
 
