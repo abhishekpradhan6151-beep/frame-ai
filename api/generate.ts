@@ -1,4 +1,4 @@
-import { processGeneration } from '../src/server/geminiService';
+import { processGeneration } from './_lib/geminiService';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {

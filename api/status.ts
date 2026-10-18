@@ -1,4 +1,4 @@
-import { getStatus } from '../src/server/geminiService';
+import { getStatus } from './_lib/geminiService';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'GET') {
