@@ -6,6 +6,7 @@ import {
   getZipFilePath,
   processGeneration,
   processQuickEdit,
+  sanitizeError,
 } from '../src/server/geminiService';
 import statusHandler from '../api/status';
 import generateHandler from '../api/generate';
@@ -127,6 +128,31 @@ describe('FRAME Server & Shared Gemini Service', () => {
 
     expect(shortened.targetDuration).toBe(15);
     expect(shortened.scenes.length).toBe(3);
+  });
+
+  it('sanitizeError redacts sensitive API keys and query parameters', () => {
+    const errorWithKey = new Error('Request failed with url https://generativelanguage.googleapis.com/v1beta/models?key=AIzaSyA1234567890abcdef1234567890abcde');
+    const sanitized = sanitizeError(errorWithKey);
+    expect(sanitized).not.toContain('AIzaSyA1234567890abcdef1234567890abcde');
+    expect(sanitized).toContain('[REDACTED]');
+  });
+
+  it('processGeneration throws clear error when Live AI is requested but key is missing', async () => {
+    const originalKey = process.env.GEMINI_API_KEY;
+    try {
+      delete process.env.GEMINI_API_KEY;
+      // Force client cache refresh if needed
+      await expect(
+        processGeneration({
+          idea: 'Testing live AI with missing key',
+          preferDemo: false,
+        })
+      ).rejects.toThrow(/GEMINI_API_KEY/);
+    } finally {
+      if (originalKey) {
+        process.env.GEMINI_API_KEY = originalKey;
+      }
+    }
   });
 });
 

@@ -23,6 +23,17 @@ export function getAiClient(): GoogleGenAI | null {
   return cachedAiClient;
 }
 
+export function sanitizeError(error: any): string {
+  if (!error) return 'An error occurred during Gemini request';
+  let message = typeof error.message === 'string' ? error.message : String(error);
+  if (process.env.GEMINI_API_KEY) {
+    message = message.replaceAll(process.env.GEMINI_API_KEY, '[REDACTED]');
+  }
+  message = message.replace(/key=[A-Za-z0-9_-]+/gi, 'key=[REDACTED]');
+  message = message.replace(/AIza[0-9A-Za-z-_]{35}/g, '[REDACTED]');
+  return message;
+}
+
 export function isLiveAiConfigured(): boolean {
   return Boolean(process.env.GEMINI_API_KEY);
 }
@@ -85,8 +96,8 @@ export async function processGeneration(input: GenerateInput): Promise<{
 
   const aiClient = getAiClient();
 
-  // If client explicitly requested demo mode or no Gemini API key is configured
-  if (preferDemo || !aiClient) {
+  // If client explicitly requested demo mode
+  if (preferDemo) {
     const mockProject = generateMockProject(
       idea.trim(),
       platform as Platform,
@@ -96,6 +107,11 @@ export async function processGeneration(input: GenerateInput): Promise<{
       sanitizedCustom
     );
     return { project: mockProject, statusCode: 200 };
+  }
+
+  // Live AI request requires configured GEMINI_API_KEY
+  if (!aiClient) {
+    throw new Error('GEMINI_API_KEY environment variable is missing or not configured on the server');
   }
 
   // Live AI generation with Gemini 3.8 Flash
@@ -226,8 +242,9 @@ Provide:
 
     return { project, statusCode: 200 };
   } catch (error: any) {
-    console.error('Gemini Generation Error:', error);
-    throw error;
+    const safeMsg = sanitizeError(error);
+    console.error('Gemini Generation Error:', safeMsg);
+    throw new Error(safeMsg);
   }
 }
 
@@ -241,8 +258,8 @@ export async function processQuickEdit(
 
   const aiClient = getAiClient();
 
-  // If client requested demo mode, or project is a demo blueprint, or no API key is set
-  if (preferDemo || !currentProject.isAiGenerated || !aiClient) {
+  // If client explicitly requested demo mode or current project is a static demo blueprint
+  if (preferDemo || !currentProject.isAiGenerated) {
     // In-memory smart quick edits
     const updated = { ...currentProject, updatedAt: new Date().toISOString() };
     if (action === 'punch-hook') {
@@ -264,6 +281,11 @@ export async function processQuickEdit(
     return updated;
   }
 
+  // Live AI quick edit requires configured GEMINI_API_KEY
+  if (!aiClient) {
+    throw new Error('GEMINI_API_KEY environment variable is missing or not configured on the server');
+  }
+
   const editPrompt = `You are a video script editor. Apply this quick edit action to the existing video project.
 Action: ${action}
 ${targetTone ? `Target Tone: ${targetTone}` : ''}
@@ -283,22 +305,28 @@ ${JSON.stringify({
 
 Return the updated project JSON with all fields preserved or updated appropriately according to the instruction.`;
 
-  const response = await aiClient.models.generateContent({
-    model: 'gemini-3.8-flash',
-    contents: editPrompt,
-    config: {
-      responseMimeType: 'application/json',
-    },
-  });
+  try {
+    const response = await aiClient.models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents: editPrompt,
+      config: {
+        responseMimeType: 'application/json',
+      },
+    });
 
-  const parsed = JSON.parse(response.text || '{}');
-  const merged: VideoProject = {
-    ...currentProject,
-    ...parsed,
-    updatedAt: new Date().toISOString(),
-    isAiGenerated: true,
-    modelUsed: 'gemini-3.8-flash (Quick Edit)',
-  };
+    const parsed = JSON.parse(response.text || '{}');
+    const merged: VideoProject = {
+      ...currentProject,
+      ...parsed,
+      updatedAt: new Date().toISOString(),
+      isAiGenerated: true,
+      modelUsed: 'gemini-3.8-flash (Quick Edit)',
+    };
 
-  return merged;
+    return merged;
+  } catch (error: any) {
+    const safeMsg = sanitizeError(error);
+    console.error('Gemini Quick Edit Error:', safeMsg);
+    throw new Error(safeMsg);
+  }
 }

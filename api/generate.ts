@@ -1,4 +1,4 @@
-import { processGeneration } from './_lib/geminiService';
+import { processGeneration, sanitizeError } from './_lib/geminiService';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
@@ -11,8 +11,8 @@ export default async function handler(req: any, res: any) {
     const result = await processGeneration(body);
     return res.status(result.statusCode || 200).json(result.project);
   } catch (error: any) {
-    console.error('API /api/generate Error:', error);
-    const message = error?.message || 'Generation failed';
+    const message = sanitizeError(error);
+    console.error('API /api/generate Error:', message);
     return res.status(500).json({ error: message });
   }
 }

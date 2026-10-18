@@ -1,4 +1,4 @@
-import { processQuickEdit } from './_lib/geminiService';
+import { processQuickEdit, sanitizeError } from './_lib/geminiService';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
@@ -11,8 +11,8 @@ export default async function handler(req: any, res: any) {
     const updated = await processQuickEdit(body);
     return res.status(200).json(updated);
   } catch (error: any) {
-    console.error('API /api/quick-edit Error:', error);
-    const message = error?.message || 'Quick edit failed';
+    const message = sanitizeError(error);
+    console.error('API /api/quick-edit Error:', message);
     return res.status(500).json({ error: message });
   }
 }
