@@ -1,16 +1,17 @@
-import { GoogleGenAI, Type } from '@google/genai';
+import type { GoogleGenAI } from '@google/genai';
 import path from 'path';
 import fs from 'fs';
 import { generateMockProject } from './templates';
 import type { VideoProject, Platform, Tone, DurationOption, QuickEditRequest } from '../../src/types';
 
-// Lazily or centrally initialize the GoogleGenAI client from environment variable
+// Lazily initialize the GoogleGenAI client from environment variable
 let cachedAiClient: GoogleGenAI | null = null;
 
-export function getAiClient(): GoogleGenAI | null {
+export async function getAiClient(): Promise<GoogleGenAI | null> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
   if (!cachedAiClient) {
+    const { GoogleGenAI } = await import('@google/genai');
     cachedAiClient = new GoogleGenAI({
       apiKey,
       httpOptions: {
@@ -94,8 +95,6 @@ export async function processGeneration(input: GenerateInput): Promise<{
       ? customInstructions.trim().slice(0, 2000)
       : undefined;
 
-  const aiClient = getAiClient();
-
   // If client explicitly requested demo mode
   if (preferDemo) {
     const mockProject = generateMockProject(
@@ -108,6 +107,8 @@ export async function processGeneration(input: GenerateInput): Promise<{
     );
     return { project: mockProject, statusCode: 200 };
   }
+
+  const aiClient = await getAiClient();
 
   // Live AI request requires configured GEMINI_API_KEY
   if (!aiClient) {
@@ -137,6 +138,7 @@ Provide:
 5. 3 Call-To-Action (CTA) variations (save/share loop, comment bait, follow trigger)`;
 
   try {
+    const { Type } = await import('@google/genai');
     const response = await aiClient.models.generateContent({
       model: 'gemini-3.8-flash',
       contents: prompt,
@@ -256,8 +258,6 @@ export async function processQuickEdit(
     throw new Error('currentProject is required');
   }
 
-  const aiClient = getAiClient();
-
   // If client explicitly requested demo mode or current project is a static demo blueprint
   if (preferDemo || !currentProject.isAiGenerated) {
     // In-memory smart quick edits
@@ -280,6 +280,8 @@ export async function processQuickEdit(
     }
     return updated;
   }
+
+  const aiClient = await getAiClient();
 
   // Live AI quick edit requires configured GEMINI_API_KEY
   if (!aiClient) {
