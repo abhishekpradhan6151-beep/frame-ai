@@ -2,7 +2,7 @@
   "framework": "vite",
   "functions": {
     "api/*.ts": {
-      "includeFiles": "{node_modules/@google/genai/**,frame-ai.zip,public/frame-ai.zip}"
+      "includeFiles": "{api/_lib/**,node_modules/@google/genai/**,frame-ai.zip,public/frame-ai.zip}"
     }
   },
   "rewrites": [

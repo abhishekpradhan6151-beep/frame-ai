@@ -1,4 +1,4 @@
-import { processGeneration, sanitizeError } from './_lib/geminiService';
+import { processGeneration, sanitizeError } from './_lib/geminiService.js';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {

@@ -1,7 +1,7 @@
 import type { GoogleGenAI } from '@google/genai';
 import path from 'path';
 import fs from 'fs';
-import { generateMockProject } from './templates';
+import { generateMockProject } from './templates.js';
 import type { VideoProject, Platform, Tone, DurationOption, QuickEditRequest } from '../../src/types';
 
 // Lazily initialize the GoogleGenAI client from environment variable

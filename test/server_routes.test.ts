@@ -7,7 +7,7 @@ import {
   processGeneration,
   processQuickEdit,
   sanitizeError,
-} from '../api/_lib/geminiService';
+} from '../api/_lib/geminiService.js';
 import statusHandler from '../api/status';
 import generateHandler from '../api/generate';
 import quickEditHandler from '../api/quick-edit';
@@ -254,13 +254,13 @@ describe('Vercel Serverless Function Endpoints (/api)', () => {
 describe('Vercel Serverless Function Module Resolution & Bundling Regression Tests', () => {
   const routes = ['status.ts', 'generate.ts', 'quick-edit.ts', 'download-zip.ts'];
 
-  it('all four API route files import from ./_lib/geminiService and NOT unbundled ../src/server', () => {
+  it('all four API route files import from ./_lib/geminiService.js with explicit ESM extension and NOT unbundled ../src/server', () => {
     for (const route of routes) {
       const filePath = path.resolve(process.cwd(), 'api', route);
       expect(fs.existsSync(filePath)).toBe(true);
       const content = fs.readFileSync(filePath, 'utf-8');
       expect(content).not.toContain('../src/server/geminiService');
-      expect(content).toContain('./_lib/geminiService');
+      expect(content).toContain('./_lib/geminiService.js');
     }
   });
 
