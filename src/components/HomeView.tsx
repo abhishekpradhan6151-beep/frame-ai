@@ -202,15 +202,27 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   <AlertCircle className="h-4 w-4 shrink-0" />
                   <span className="break-words">{error || generationError}</span>
                 </div>
-                {generationError && onClearGenerationError && !error && (
-                  <button
-                    type="button"
-                    onClick={onClearGenerationError}
-                    aria-label="Dismiss error"
-                    className="text-rose-500 hover:text-rose-700 dark:hover:text-rose-300 font-bold px-1.5 py-0.5 rounded focus:outline-none"
-                  >
-                    ✕
-                  </button>
+                {generationError && !error && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      disabled={isGenerating}
+                      onClick={handleSubmit}
+                      className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-600 dark:text-rose-300 transition-colors disabled:opacity-50 cursor-pointer"
+                    >
+                      Retry
+                    </button>
+                    {onClearGenerationError && (
+                      <button
+                        type="button"
+                        onClick={onClearGenerationError}
+                        aria-label="Dismiss error"
+                        className="text-rose-500 hover:text-rose-700 dark:hover:text-rose-300 font-bold px-1.5 py-0.5 rounded focus:outline-none"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             )}

@@ -4,9 +4,71 @@ import {
   extractRetryDelay,
   executeWithRetry,
   sanitizeError,
+  categorizeGeminiError,
+  GeminiServiceError,
 } from '../api/_lib/geminiService.js';
 
-describe('Gemini Transient 503 UNAVAILABLE Error & Retry Handling', () => {
+describe('Gemini Production Error Handling & Status Preservation', () => {
+  describe('categorizeGeminiError & Status Mapping', () => {
+    it('Scenario: maps 503 UNAVAILABLE to HTTP 503 with temporary service unavailable message', () => {
+      const err = {
+        code: 503,
+        status: 'UNAVAILABLE',
+        message: 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.',
+      };
+      const cat = categorizeGeminiError(err);
+      expect(cat.statusCode).toBe(503);
+      expect(cat.category).toBe('SERVICE_UNAVAILABLE');
+      expect(cat.message).toBe('AI service is temporarily experiencing high demand. Please try again in a few moments.');
+    });
+
+    it('Scenario: maps 429 to HTTP 429 with rate-limit message and does NOT claim daily quota is exhausted', () => {
+      const err = {
+        status: 429,
+        message: 'RESOURCE_EXHAUSTED: Rate limit exceeded for requests per minute',
+      };
+      const cat = categorizeGeminiError(err);
+      expect(cat.statusCode).toBe(429);
+      expect(cat.category).toBe('RATE_LIMIT');
+      expect(cat.message).toBe('AI request rate limit reached. Please wait a moment before trying again.');
+      expect(cat.message).not.toContain('daily quota is exhausted');
+    });
+
+    it('Scenario: maps 504 DEADLINE_EXCEEDED to HTTP 504 with timeout message', () => {
+      const err = {
+        status: 504,
+        message: 'Gateway Timeout: deadline exceeded while waiting for model completion',
+      };
+      const cat = categorizeGeminiError(err);
+      expect(cat.statusCode).toBe(504);
+      expect(cat.category).toBe('TIMEOUT');
+      expect(cat.message).toBe('The AI service timed out while generating your video framework. Please try again.');
+    });
+
+    it('Scenario: maps 401 / 403 / PERMISSION_DENIED to HTTP 401 with configuration error and zero key exposure', () => {
+      const err = {
+        status: 403,
+        message: 'PERMISSION_DENIED: API key not valid. Please pass a valid API key with key=AIzaSyA1234567890123456789012345678901',
+      };
+      const cat = categorizeGeminiError(err);
+      expect(cat.statusCode).toBe(401);
+      expect(cat.category).toBe('AUTH_ERROR');
+      expect(cat.message).toBe('Gemini API key is invalid or not properly configured on the server.');
+      expect(cat.message).not.toMatch(/AIza[0-9A-Za-z-_]{35}/);
+    });
+
+    it('Scenario: maps 400 INVALID_ARGUMENT to HTTP 400', () => {
+      const err = {
+        status: 400,
+        message: 'INVALID_ARGUMENT: Schema validation failed',
+      };
+      const cat = categorizeGeminiError(err);
+      expect(cat.statusCode).toBe(400);
+      expect(cat.category).toBe('INVALID_REQUEST');
+      expect(cat.message).toContain('Invalid generation request:');
+    });
+  });
+
   describe('isTransientError classification', () => {
     it('identifies 503 high demand error as transient', () => {
       const error503 = {
@@ -17,42 +79,29 @@ describe('Gemini Transient 503 UNAVAILABLE Error & Retry Handling', () => {
       expect(isTransientError(error503)).toBe(true);
     });
 
-    it('identifies 429 rate limit / resource exhausted error as transient', () => {
+    it('identifies 429 rate limit error as transient', () => {
       const error429 = {
         status: 429,
-        message: 'RESOURCE_EXHAUSTED: quota exceeded for model gemini-3.8-flash',
+        message: 'RESOURCE_EXHAUSTED: rate limit exceeded',
       };
       expect(isTransientError(error429)).toBe(true);
     });
 
-    it('identifies 504 gateway timeout as transient', () => {
+    it('identifies 504 timeout error as transient', () => {
       const error504 = {
         status: 504,
-        message: 'Gateway Timeout: upstream deadline exceeded',
+        message: 'Gateway Timeout: deadline exceeded',
       };
       expect(isTransientError(error504)).toBe(true);
     });
 
     it('identifies 400 invalid argument as non-retryable', () => {
-      const error400 = {
-        status: 400,
-        message: 'INVALID_ARGUMENT: Schema validation failed for generation config',
-      };
-      expect(isTransientError(error400)).toBe(false);
+      expect(isTransientError({ status: 400, message: 'Bad Request' })).toBe(false);
     });
 
     it('identifies 401 / 403 API key or auth errors as non-retryable', () => {
-      const error401 = {
-        status: 401,
-        message: 'API_KEY_INVALID: API key not valid. Please pass a valid API key.',
-      };
-      expect(isTransientError(error401)).toBe(false);
-
-      const error403 = {
-        status: 403,
-        message: 'PERMISSION_DENIED: Gemini API has not been used in project',
-      };
-      expect(isTransientError(error403)).toBe(false);
+      expect(isTransientError({ status: 401, message: 'Invalid API Key' })).toBe(false);
+      expect(isTransientError({ status: 403, message: 'Permission Denied' })).toBe(false);
     });
   });
 
@@ -79,8 +128,8 @@ describe('Gemini Transient 503 UNAVAILABLE Error & Retry Handling', () => {
     });
   });
 
-  describe('executeWithRetry behavior', () => {
-    it('Scenario 1: succeeds on first attempt without delay', async () => {
+  describe('executeWithRetry behavior & HTTP status propagation', () => {
+    it('Requirement 7.1: Successful generation on first attempt', async () => {
       const mockOp = vi.fn().mockResolvedValue({ text: '{"title":"Success Video"}' });
 
       const result = await executeWithRetry(mockOp, {
@@ -92,7 +141,7 @@ describe('Gemini Transient 503 UNAVAILABLE Error & Retry Handling', () => {
       expect(mockOp).toHaveBeenCalledTimes(1);
     });
 
-    it('Scenario 2: recovers after transient 503 failure and succeeds on retry', async () => {
+    it('Requirement 7.2: 503 followed by successful generation', async () => {
       const transientError = {
         code: 503,
         status: 'UNAVAILABLE',
@@ -114,7 +163,7 @@ describe('Gemini Transient 503 UNAVAILABLE Error & Retry Handling', () => {
       expect(mockOp).toHaveBeenCalledTimes(2);
     });
 
-    it('Scenario 3: exhausts retries on persistent 503 and returns safe user-friendly message', async () => {
+    it('Requirement 7.3: Persistent 503 after bounded retries preserves HTTP 503 status', async () => {
       const persistentError = {
         code: 503,
         status: 'UNAVAILABLE',
@@ -123,38 +172,92 @@ describe('Gemini Transient 503 UNAVAILABLE Error & Retry Handling', () => {
 
       const mockOp = vi.fn().mockRejectedValue(persistentError);
 
-      await expect(
-        executeWithRetry(mockOp, {
+      try {
+        await executeWithRetry(mockOp, {
           maxRetries: 2,
           initialDelayMs: 10,
           maxDelayMs: 30,
-        })
-      ).rejects.toThrow('AI service is temporarily experiencing high demand. Please try again in a few moments.');
-
-      // 1 initial attempt + 2 retries = 3 calls total
-      expect(mockOp).toHaveBeenCalledTimes(3);
+        });
+        expect.unreachable('Should have thrown');
+      } catch (err: any) {
+        expect(err).toBeInstanceOf(GeminiServiceError);
+        expect(err.statusCode).toBe(503);
+        expect(err.category).toBe('SERVICE_UNAVAILABLE');
+        expect(err.message).toBe('AI service is temporarily experiencing high demand. Please try again in a few moments.');
+        expect(mockOp).toHaveBeenCalledTimes(3);
+      }
     });
 
-    it('Scenario 4: fails immediately on non-retryable error without retrying', async () => {
-      const nonRetryableError = {
-        status: 400,
-        message: 'INVALID_ARGUMENT: Invalid input provided to model',
+    it('Requirement 7.4: 429 without falsely claiming daily quota exhaustion preserves HTTP 429 status', async () => {
+      const rateLimitError = {
+        status: 429,
+        statusText: 'Too Many Requests',
+        message: 'RESOURCE_EXHAUSTED: rate limit exceeded',
       };
 
-      const mockOp = vi.fn().mockRejectedValue(nonRetryableError);
+      const mockOp = vi.fn().mockRejectedValue(rateLimitError);
 
-      await expect(
-        executeWithRetry(mockOp, {
-          maxRetries: 3,
+      try {
+        await executeWithRetry(mockOp, {
+          maxRetries: 2,
           initialDelayMs: 10,
-        })
-      ).rejects.toThrow('INVALID_ARGUMENT: Invalid input provided to model');
-
-      // Must NOT retry 400 errors
-      expect(mockOp).toHaveBeenCalledTimes(1);
+          maxDelayMs: 30,
+        });
+        expect.unreachable('Should have thrown');
+      } catch (err: any) {
+        expect(err).toBeInstanceOf(GeminiServiceError);
+        expect(err.statusCode).toBe(429);
+        expect(err.category).toBe('RATE_LIMIT');
+        expect(err.message).toBe('AI request rate limit reached. Please wait a moment before trying again.');
+        expect(err.message).not.toContain('daily quota');
+      }
     });
 
-    it('Sanitization prevents key leakage even during errors', () => {
+    it('Requirement 7.5: 504 timeout preserves HTTP 504 status', async () => {
+      const timeoutError = {
+        status: 504,
+        message: 'Gateway Timeout: deadline exceeded',
+      };
+
+      const mockOp = vi.fn().mockRejectedValue(timeoutError);
+
+      try {
+        await executeWithRetry(mockOp, {
+          maxRetries: 1,
+          initialDelayMs: 10,
+        });
+        expect.unreachable('Should have thrown');
+      } catch (err: any) {
+        expect(err).toBeInstanceOf(GeminiServiceError);
+        expect(err.statusCode).toBe(504);
+        expect(err.category).toBe('TIMEOUT');
+        expect(err.message).toBe('The AI service timed out while generating your video framework. Please try again.');
+      }
+    });
+
+    it('Requirement 7.6: Invalid API key or permanent 4xx error fails on first attempt without retrying', async () => {
+      const authError = {
+        status: 401,
+        message: 'API_KEY_INVALID: API key not valid.',
+      };
+
+      const mockOp = vi.fn().mockRejectedValue(authError);
+
+      try {
+        await executeWithRetry(mockOp, {
+          maxRetries: 3,
+          initialDelayMs: 10,
+        });
+        expect.unreachable('Should have thrown');
+      } catch (err: any) {
+        expect(err).toBeInstanceOf(GeminiServiceError);
+        expect(err.statusCode).toBe(401);
+        expect(err.category).toBe('AUTH_ERROR');
+        expect(mockOp).toHaveBeenCalledTimes(1);
+      }
+    });
+
+    it('Requirement 7.7: Sanitization prevents key leakage even during errors', () => {
       const leakedKeyError = new Error('Request to https://generativelanguage.googleapis.com?key=AIzaSyA1234567890123456789012345678901 failed');
       const sanitized = sanitizeError(leakedKeyError);
       expect(sanitized).not.toContain('AIzaSyA1234567890123456789012345678901');
