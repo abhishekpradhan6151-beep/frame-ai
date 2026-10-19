@@ -9,15 +9,11 @@ describe('Firebase Cloud Functions 2nd Gen Backend Integration Tests', () => {
   const originalApiKey = process.env.GEMINI_API_KEY;
 
   beforeEach(async () => {
-    // Dynamically load the compiled CommonJS functions index
+    // Dynamically load the compiled Express app from functions/lib/app.js
     // @ts-ignore
-    const functionsModule = await import('../functions/lib/index.js');
-    expect(functionsModule.api).toBeDefined();
-
-    // The Express app is passed to onRequest; we can extract or test it via the internal handler or express server
-    // In Firebase Functions 2nd Gen, `api` is an HttpsFunction wrapped around the Express app
-    // We can mount the express app on a local random port for direct HTTP integration testing
-    const expressApp = (functionsModule.api as any).__run || (functionsModule.api as any);
+    const appModule = await import('../functions/lib/app.js');
+    const expressApp = appModule.app || appModule.default || appModule;
+    expect(expressApp).toBeDefined();
 
     await new Promise<void>((resolve) => {
       server = http.createServer(expressApp);
