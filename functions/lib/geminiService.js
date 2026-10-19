@@ -38,6 +38,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getAiClient = getAiClient;
 exports.sanitizeError = sanitizeError;
+exports.isTransientError = isTransientError;
+exports.extractRetryDelay = extractRetryDelay;
+exports.executeWithRetry = executeWithRetry;
 exports.getStatus = getStatus;
 exports.getZipFilePath = getZipFilePath;
 exports.processGeneration = processGeneration;
@@ -76,6 +79,89 @@ function sanitizeError(error) {
     // Redact AIza style Google API keys
     message = message.replace(/AIza[0-9A-Za-z\-_]{35}/g, '[REDACTED_API_KEY]');
     return message;
+}
+function isTransientError(error) {
+    if (!error)
+        return false;
+    const status = error.status ||
+        error.code ||
+        error.statusCode ||
+        error.error?.code ||
+        error.error?.status;
+    const message = typeof error.message === 'string'
+        ? error.message
+        : typeof error === 'string'
+            ? error
+            : JSON.stringify(error);
+    if (status === 400 ||
+        status === 401 ||
+        status === 403 ||
+        status === 404 ||
+        status === 'INVALID_ARGUMENT' ||
+        status === 'PERMISSION_DENIED' ||
+        status === 'UNAUTHENTICATED' ||
+        status === 'NOT_FOUND' ||
+        /invalid api key|api key not valid|permission denied|unauthenticated/i.test(message)) {
+        return false;
+    }
+    if (status === 503 ||
+        status === 429 ||
+        status === 504 ||
+        status === 'UNAVAILABLE' ||
+        status === 'RESOURCE_EXHAUSTED') {
+        return true;
+    }
+    if (/high demand|spikes in demand|temporarily unavailable|unavailable|rate limit|quota exceeded|overloaded|please try again later/i.test(message)) {
+        return true;
+    }
+    return false;
+}
+function extractRetryDelay(error) {
+    if (!error)
+        return null;
+    const retryAfterHeader = error.response?.headers?.get?.('retry-after') || error.headers?.['retry-after'];
+    if (retryAfterHeader) {
+        const parsed = parseFloat(retryAfterHeader);
+        if (!isNaN(parsed) && parsed > 0) {
+            return Math.min(parsed * 1000, 5000);
+        }
+    }
+    const msg = typeof error.message === 'string' ? error.message : '';
+    const match = msg.match(/retry after\s+([0-9.]+)\s*s/i);
+    if (match) {
+        const sec = parseFloat(match[1]);
+        if (!isNaN(sec) && sec > 0) {
+            return Math.min(sec * 1000, 5000);
+        }
+    }
+    return null;
+}
+async function executeWithRetry(operation, options = {}) {
+    const maxRetries = options.maxRetries ?? 2;
+    const initialDelayMs = options.initialDelayMs ?? 800;
+    const maxDelayMs = options.maxDelayMs ?? 4000;
+    let lastError = null;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            return await operation();
+        }
+        catch (error) {
+            lastError = error;
+            if (!isTransientError(error) || attempt === maxRetries) {
+                break;
+            }
+            const serverDelay = extractRetryDelay(error);
+            const backoff = Math.min(initialDelayMs * Math.pow(2, attempt), maxDelayMs);
+            const jitter = Math.random() * (backoff * 0.25);
+            const delay = Math.min(serverDelay ?? (backoff + jitter), maxDelayMs);
+            await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+    }
+    if (isTransientError(lastError)) {
+        throw new Error('AI service is temporarily experiencing high demand. Please try again in a few moments.');
+    }
+    const safeMsg = sanitizeError(lastError);
+    throw new Error(safeMsg);
 }
 function getStatus() {
     const isAvailable = Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim().length > 0);
@@ -141,7 +227,7 @@ Provide:
 5. 3 Call-To-Action (CTA) variations (save/share loop, comment bait, follow trigger)`;
     try {
         const { Type } = await Promise.resolve().then(() => __importStar(require('@google/genai')));
-        const response = await aiClient.models.generateContent({
+        const response = await executeWithRetry(() => aiClient.models.generateContent({
             model: 'gemini-3.8-flash',
             contents: prompt,
             config: {
@@ -218,7 +304,7 @@ Provide:
                     required: ['title', 'hooks', 'scenes', 'captions', 'hashtags', 'ctas'],
                 },
             },
-        });
+        }));
         const parsed = JSON.parse(response.text || '{}');
         const now = new Date().toISOString();
         const project = {
@@ -295,7 +381,7 @@ Return a JSON with:
 1. "scenes": updated scenes list
 2. "hooks": updated hooks list`;
     const { Type } = await Promise.resolve().then(() => __importStar(require('@google/genai')));
-    const response = await aiClient.models.generateContent({
+    const response = await executeWithRetry(() => aiClient.models.generateContent({
         model: 'gemini-3.8-flash',
         contents: editPrompt,
         config: {
@@ -338,7 +424,7 @@ Return a JSON with:
                 required: ['scenes', 'hooks'],
             },
         },
-    });
+    }));
     const parsed = JSON.parse(response.text || '{}');
     return {
         ...currentProject,

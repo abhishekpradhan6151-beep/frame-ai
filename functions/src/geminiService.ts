@@ -37,6 +37,124 @@ export function sanitizeError(error: any): string {
   return message;
 }
 
+export function isTransientError(error: any): boolean {
+  if (!error) return false;
+
+  const status =
+    error.status ||
+    error.code ||
+    error.statusCode ||
+    error.error?.code ||
+    error.error?.status;
+
+  const message =
+    typeof error.message === 'string'
+      ? error.message
+      : typeof error === 'string'
+      ? error
+      : JSON.stringify(error);
+
+  if (
+    status === 400 ||
+    status === 401 ||
+    status === 403 ||
+    status === 404 ||
+    status === 'INVALID_ARGUMENT' ||
+    status === 'PERMISSION_DENIED' ||
+    status === 'UNAUTHENTICATED' ||
+    status === 'NOT_FOUND' ||
+    /invalid api key|api key not valid|permission denied|unauthenticated/i.test(message)
+  ) {
+    return false;
+  }
+
+  if (
+    status === 503 ||
+    status === 429 ||
+    status === 504 ||
+    status === 'UNAVAILABLE' ||
+    status === 'RESOURCE_EXHAUSTED'
+  ) {
+    return true;
+  }
+
+  if (
+    /high demand|spikes in demand|temporarily unavailable|unavailable|rate limit|quota exceeded|overloaded|please try again later/i.test(
+      message
+    )
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+export function extractRetryDelay(error: any): number | null {
+  if (!error) return null;
+  const retryAfterHeader =
+    error.response?.headers?.get?.('retry-after') || error.headers?.['retry-after'];
+  if (retryAfterHeader) {
+    const parsed = parseFloat(retryAfterHeader);
+    if (!isNaN(parsed) && parsed > 0) {
+      return Math.min(parsed * 1000, 5000);
+    }
+  }
+
+  const msg = typeof error.message === 'string' ? error.message : '';
+  const match = msg.match(/retry after\s+([0-9.]+)\s*s/i);
+  if (match) {
+    const sec = parseFloat(match[1]);
+    if (!isNaN(sec) && sec > 0) {
+      return Math.min(sec * 1000, 5000);
+    }
+  }
+
+  return null;
+}
+
+export interface RetryOptions {
+  maxRetries?: number;
+  initialDelayMs?: number;
+  maxDelayMs?: number;
+}
+
+export async function executeWithRetry<T>(
+  operation: () => Promise<T>,
+  options: RetryOptions = {}
+): Promise<T> {
+  const maxRetries = options.maxRetries ?? 2;
+  const initialDelayMs = options.initialDelayMs ?? 800;
+  const maxDelayMs = options.maxDelayMs ?? 4000;
+
+  let lastError: any = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error: any) {
+      lastError = error;
+
+      if (!isTransientError(error) || attempt === maxRetries) {
+        break;
+      }
+
+      const serverDelay = extractRetryDelay(error);
+      const backoff = Math.min(initialDelayMs * Math.pow(2, attempt), maxDelayMs);
+      const jitter = Math.random() * (backoff * 0.25);
+      const delay = Math.min(serverDelay ?? (backoff + jitter), maxDelayMs);
+
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+
+  if (isTransientError(lastError)) {
+    throw new Error('AI service is temporarily experiencing high demand. Please try again in a few moments.');
+  }
+
+  const safeMsg = sanitizeError(lastError);
+  throw new Error(safeMsg);
+}
+
 export function getStatus() {
   const isAvailable = Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim().length > 0);
   return {
@@ -138,84 +256,86 @@ Provide:
 
   try {
     const { Type } = await import('@google/genai');
-    const response = await aiClient.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            title: { type: Type.STRING, description: 'Short catchy project title under 40 chars' },
-            hooks: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  id: { type: Type.STRING },
-                  angle: {
-                    type: Type.STRING,
-                    enum: ['curiosity', 'viral-shock', 'relatable-story', 'hot-take', 'statistic', 'question'],
+    const response = await executeWithRetry(() =>
+      aiClient.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              title: { type: Type.STRING, description: 'Short catchy project title under 40 chars' },
+              hooks: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    id: { type: Type.STRING },
+                    angle: {
+                      type: Type.STRING,
+                      enum: ['curiosity', 'viral-shock', 'relatable-story', 'hot-take', 'statistic', 'question'],
+                    },
+                    label: { type: Type.STRING },
+                    text: { type: Type.STRING },
+                    viralityScore: { type: Type.NUMBER },
+                    retentionTip: { type: Type.STRING },
                   },
-                  label: { type: Type.STRING },
-                  text: { type: Type.STRING },
-                  viralityScore: { type: Type.NUMBER },
-                  retentionTip: { type: Type.STRING },
+                  required: ['id', 'angle', 'label', 'text', 'viralityScore', 'retentionTip'],
                 },
-                required: ['id', 'angle', 'label', 'text', 'viralityScore', 'retentionTip'],
+              },
+              scenes: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    id: { type: Type.STRING },
+                    sceneNumber: { type: Type.NUMBER },
+                    durationSeconds: { type: Type.NUMBER },
+                    visualCue: { type: Type.STRING },
+                    audioVoiceover: { type: Type.STRING },
+                    onScreenText: { type: Type.STRING },
+                    bRollPrompt: { type: Type.STRING },
+                  },
+                  required: ['id', 'sceneNumber', 'durationSeconds', 'visualCue', 'audioVoiceover', 'onScreenText'],
+                },
+              },
+              captions: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    id: { type: Type.STRING },
+                    style: { type: Type.STRING, enum: ['short-punchy', 'storytelling', 'seo-keyword-rich'] },
+                    title: { type: Type.STRING },
+                    text: { type: Type.STRING },
+                  },
+                  required: ['id', 'style', 'title', 'text'],
+                },
+              },
+              hashtags: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+              },
+              ctas: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    id: { type: Type.STRING },
+                    type: { type: Type.STRING, enum: ['comment', 'save-share', 'follow', 'link'] },
+                    title: { type: Type.STRING },
+                    text: { type: Type.STRING },
+                  },
+                  required: ['id', 'type', 'title', 'text'],
+                },
               },
             },
-            scenes: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  id: { type: Type.STRING },
-                  sceneNumber: { type: Type.NUMBER },
-                  durationSeconds: { type: Type.NUMBER },
-                  visualCue: { type: Type.STRING },
-                  audioVoiceover: { type: Type.STRING },
-                  onScreenText: { type: Type.STRING },
-                  bRollPrompt: { type: Type.STRING },
-                },
-                required: ['id', 'sceneNumber', 'durationSeconds', 'visualCue', 'audioVoiceover', 'onScreenText'],
-              },
-            },
-            captions: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  id: { type: Type.STRING },
-                  style: { type: Type.STRING, enum: ['short-punchy', 'storytelling', 'seo-keyword-rich'] },
-                  title: { type: Type.STRING },
-                  text: { type: Type.STRING },
-                },
-                required: ['id', 'style', 'title', 'text'],
-              },
-            },
-            hashtags: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-            },
-            ctas: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  id: { type: Type.STRING },
-                  type: { type: Type.STRING, enum: ['comment', 'save-share', 'follow', 'link'] },
-                  title: { type: Type.STRING },
-                  text: { type: Type.STRING },
-                },
-                required: ['id', 'type', 'title', 'text'],
-              },
-            },
+            required: ['title', 'hooks', 'scenes', 'captions', 'hashtags', 'ctas'],
           },
-          required: ['title', 'hooks', 'scenes', 'captions', 'hashtags', 'ctas'],
         },
-      },
-    });
+      })
+    );
 
     const parsed = JSON.parse(response.text || '{}');
     const now = new Date().toISOString();
@@ -299,50 +419,52 @@ Return a JSON with:
 2. "hooks": updated hooks list`;
 
   const { Type } = await import('@google/genai');
-  const response = await aiClient.models.generateContent({
-    model: 'gemini-3.8-flash',
-    contents: editPrompt,
-    config: {
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          scenes: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                id: { type: Type.STRING },
-                sceneNumber: { type: Type.NUMBER },
-                durationSeconds: { type: Type.NUMBER },
-                visualCue: { type: Type.STRING },
-                audioVoiceover: { type: Type.STRING },
-                onScreenText: { type: Type.STRING },
-                bRollPrompt: { type: Type.STRING },
+  const response = await executeWithRetry(() =>
+    aiClient.models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents: editPrompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            scenes: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  id: { type: Type.STRING },
+                  sceneNumber: { type: Type.NUMBER },
+                  durationSeconds: { type: Type.NUMBER },
+                  visualCue: { type: Type.STRING },
+                  audioVoiceover: { type: Type.STRING },
+                  onScreenText: { type: Type.STRING },
+                  bRollPrompt: { type: Type.STRING },
+                },
+                required: ['id', 'sceneNumber', 'durationSeconds', 'visualCue', 'audioVoiceover', 'onScreenText'],
               },
-              required: ['id', 'sceneNumber', 'durationSeconds', 'visualCue', 'audioVoiceover', 'onScreenText'],
+            },
+            hooks: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  id: { type: Type.STRING },
+                  angle: { type: Type.STRING },
+                  label: { type: Type.STRING },
+                  text: { type: Type.STRING },
+                  viralityScore: { type: Type.NUMBER },
+                  retentionTip: { type: Type.STRING },
+                },
+                required: ['id', 'angle', 'label', 'text', 'viralityScore', 'retentionTip'],
+              },
             },
           },
-          hooks: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                id: { type: Type.STRING },
-                angle: { type: Type.STRING },
-                label: { type: Type.STRING },
-                text: { type: Type.STRING },
-                viralityScore: { type: Type.NUMBER },
-                retentionTip: { type: Type.STRING },
-              },
-              required: ['id', 'angle', 'label', 'text', 'viralityScore', 'retentionTip'],
-            },
-          },
+          required: ['scenes', 'hooks'],
         },
-        required: ['scenes', 'hooks'],
       },
-    },
-  });
+    })
+  );
 
   const parsed = JSON.parse(response.text || '{}');
   return {

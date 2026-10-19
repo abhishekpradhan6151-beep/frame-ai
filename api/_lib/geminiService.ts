@@ -35,6 +35,255 @@ export function sanitizeError(error: any): string {
   return message;
 }
 
+export type GeminiErrorCategory =
+  | 'SERVICE_UNAVAILABLE'
+  | 'RATE_LIMIT'
+  | 'TIMEOUT'
+  | 'AUTH_ERROR'
+  | 'INVALID_REQUEST'
+  | 'INTERNAL_ERROR';
+
+export class GeminiServiceError extends Error {
+  public statusCode: number;
+  public category: GeminiErrorCategory;
+
+  constructor(message: string, statusCode: number, category: GeminiErrorCategory) {
+    super(message);
+    this.name = 'GeminiServiceError';
+    this.statusCode = statusCode;
+    this.category = category;
+    Object.setPrototypeOf(this, GeminiServiceError.prototype);
+  }
+}
+
+export function categorizeGeminiError(error: any): {
+  statusCode: number;
+  message: string;
+  category: GeminiErrorCategory;
+} {
+  if (!error) {
+    return {
+      statusCode: 500,
+      message: 'An unexpected internal error occurred during generation.',
+      category: 'INTERNAL_ERROR',
+    };
+  }
+
+  const rawStatus =
+    error.statusCode ||
+    error.status ||
+    error.code ||
+    error.error?.code ||
+    error.error?.status;
+
+  const rawMessage =
+    typeof error.message === 'string'
+      ? error.message
+      : typeof error === 'string'
+      ? error
+      : JSON.stringify(error);
+
+  const cleanMessage = sanitizeError(rawMessage);
+
+  // 1. Auth & Configuration Errors (401, 403, PERMISSION_DENIED, UNAUTHENTICATED)
+  if (
+    rawStatus === 401 ||
+    rawStatus === 403 ||
+    rawStatus === 'PERMISSION_DENIED' ||
+    rawStatus === 'UNAUTHENTICATED' ||
+    /invalid api key|api key not valid|permission denied|unauthenticated/i.test(cleanMessage)
+  ) {
+    return {
+      statusCode: 401,
+      message: 'Gemini API key is invalid or not properly configured on the server.',
+      category: 'AUTH_ERROR',
+    };
+  }
+
+  // 2. Client / Validation / Invalid Request Errors (400, INVALID_ARGUMENT)
+  if (rawStatus === 400 || rawStatus === 'INVALID_ARGUMENT') {
+    return {
+      statusCode: 400,
+      message: `Invalid generation request: ${cleanMessage.slice(0, 150)}`,
+      category: 'INVALID_REQUEST',
+    };
+  }
+
+  // 3. Timeout Errors (504, DEADLINE_EXCEEDED, Gateway Timeout)
+  if (
+    rawStatus === 504 ||
+    rawStatus === 'DEADLINE_EXCEEDED' ||
+    /deadline exceeded|timed out|gateway timeout/i.test(cleanMessage)
+  ) {
+    return {
+      statusCode: 504,
+      message: 'The AI service timed out while generating your video framework. Please try again.',
+      category: 'TIMEOUT',
+    };
+  }
+
+  // 4. Rate Limit / Resource Exhausted (429, RESOURCE_EXHAUSTED)
+  if (
+    rawStatus === 429 ||
+    rawStatus === 'RESOURCE_EXHAUSTED' ||
+    /rate limit|too many requests|resource_exhausted/i.test(cleanMessage)
+  ) {
+    return {
+      statusCode: 429,
+      message: 'AI request rate limit reached. Please wait a moment before trying again.',
+      category: 'RATE_LIMIT',
+    };
+  }
+
+  // 5. High Demand / Service Unavailable (503, UNAVAILABLE)
+  if (
+    rawStatus === 503 ||
+    rawStatus === 'UNAVAILABLE' ||
+    /high demand|spikes in demand|temporarily unavailable|unavailable|overloaded|please try again later/i.test(cleanMessage)
+  ) {
+    return {
+      statusCode: 503,
+      message: 'AI service is temporarily experiencing high demand. Please try again in a few moments.',
+      category: 'SERVICE_UNAVAILABLE',
+    };
+  }
+
+  // Fallback / Internal server error
+  const numericStatus =
+    typeof rawStatus === 'number' && rawStatus >= 400 && rawStatus <= 599
+      ? rawStatus
+      : 500;
+
+  return {
+    statusCode: numericStatus,
+    message: cleanMessage || 'An unexpected error occurred during video package generation.',
+    category: 'INTERNAL_ERROR',
+  };
+}
+
+export function isTransientError(error: any): boolean {
+  if (!error) return false;
+
+  const status =
+    error.status ||
+    error.code ||
+    error.statusCode ||
+    error.error?.code ||
+    error.error?.status;
+
+  const message =
+    typeof error.message === 'string'
+      ? error.message
+      : typeof error === 'string'
+      ? error
+      : JSON.stringify(error);
+
+  // Non-transient errors: never retry
+  if (
+    status === 400 ||
+    status === 401 ||
+    status === 403 ||
+    status === 404 ||
+    status === 'INVALID_ARGUMENT' ||
+    status === 'PERMISSION_DENIED' ||
+    status === 'UNAUTHENTICATED' ||
+    status === 'NOT_FOUND' ||
+    /invalid api key|api key not valid|permission denied|unauthenticated/i.test(message)
+  ) {
+    return false;
+  }
+
+  // Transient status codes and statuses: 503, 504, 429
+  if (
+    status === 503 ||
+    status === 429 ||
+    status === 504 ||
+    status === 'UNAVAILABLE' ||
+    status === 'RESOURCE_EXHAUSTED' ||
+    status === 'DEADLINE_EXCEEDED'
+  ) {
+    return true;
+  }
+
+  // High demand or temporary unavailability text patterns
+  if (
+    /high demand|spikes in demand|temporarily unavailable|unavailable|rate limit|quota exceeded|overloaded|please try again later/i.test(
+      message
+    )
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+export function extractRetryDelay(error: any): number | null {
+  if (!error) return null;
+  const retryAfterHeader =
+    error.response?.headers?.get?.('retry-after') || error.headers?.['retry-after'];
+  if (retryAfterHeader) {
+    const parsed = parseFloat(retryAfterHeader);
+    if (!isNaN(parsed) && parsed > 0) {
+      return Math.min(parsed * 1000, 5000);
+    }
+  }
+
+  const msg = typeof error.message === 'string' ? error.message : '';
+  const match = msg.match(/retry after\s+([0-9.]+)\s*s/i);
+  if (match) {
+    const sec = parseFloat(match[1]);
+    if (!isNaN(sec) && sec > 0) {
+      return Math.min(sec * 1000, 5000);
+    }
+  }
+
+  return null;
+}
+
+export interface RetryOptions {
+  maxRetries?: number;
+  initialDelayMs?: number;
+  maxDelayMs?: number;
+}
+
+export async function executeWithRetry<T>(
+  operation: () => Promise<T>,
+  options: RetryOptions = {}
+): Promise<T> {
+  const maxRetries = options.maxRetries ?? 2;
+  const initialDelayMs = options.initialDelayMs ?? 800;
+  const maxDelayMs = options.maxDelayMs ?? 4000;
+
+  let lastError: any = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error: any) {
+      lastError = error;
+
+      if (!isTransientError(error) || attempt === maxRetries) {
+        break;
+      }
+
+      const serverDelay = extractRetryDelay(error);
+      const backoff = Math.min(initialDelayMs * Math.pow(2, attempt), maxDelayMs);
+      const jitter = Math.random() * (backoff * 0.25);
+      const delay = Math.min(serverDelay ?? (backoff + jitter), maxDelayMs);
+
+      const errorInfo = categorizeGeminiError(error);
+      console.warn(
+        `[Gemini Attempt ${attempt + 1}/${maxRetries + 1}] Upstream retryable error (${errorInfo.statusCode} ${errorInfo.category}). Retrying in ${Math.round(delay)}ms...`
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+
+  const { statusCode, message, category } = categorizeGeminiError(lastError);
+  throw new GeminiServiceError(message, statusCode, category);
+}
+
 export function isLiveAiConfigured(): boolean {
   return Boolean(process.env.GEMINI_API_KEY);
 }
@@ -139,84 +388,86 @@ Provide:
 
   try {
     const { Type } = await import('@google/genai');
-    const response = await aiClient.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            title: { type: Type.STRING, description: 'Short catchy project title under 40 chars' },
-            hooks: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  id: { type: Type.STRING },
-                  angle: {
-                    type: Type.STRING,
-                    enum: ['curiosity', 'viral-shock', 'relatable-story', 'hot-take', 'statistic', 'question'],
+    const response = await executeWithRetry(() =>
+      aiClient.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              title: { type: Type.STRING, description: 'Short catchy project title under 40 chars' },
+              hooks: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    id: { type: Type.STRING },
+                    angle: {
+                      type: Type.STRING,
+                      enum: ['curiosity', 'viral-shock', 'relatable-story', 'hot-take', 'statistic', 'question'],
+                    },
+                    label: { type: Type.STRING },
+                    text: { type: Type.STRING },
+                    viralityScore: { type: Type.NUMBER },
+                    retentionTip: { type: Type.STRING },
                   },
-                  label: { type: Type.STRING },
-                  text: { type: Type.STRING },
-                  viralityScore: { type: Type.NUMBER },
-                  retentionTip: { type: Type.STRING },
+                  required: ['id', 'angle', 'label', 'text', 'viralityScore', 'retentionTip'],
                 },
-                required: ['id', 'angle', 'label', 'text', 'viralityScore', 'retentionTip'],
+              },
+              scenes: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    id: { type: Type.STRING },
+                    sceneNumber: { type: Type.NUMBER },
+                    durationSeconds: { type: Type.NUMBER },
+                    visualCue: { type: Type.STRING },
+                    audioVoiceover: { type: Type.STRING },
+                    onScreenText: { type: Type.STRING },
+                    bRollPrompt: { type: Type.STRING },
+                  },
+                  required: ['id', 'sceneNumber', 'durationSeconds', 'visualCue', 'audioVoiceover', 'onScreenText'],
+                },
+              },
+              captions: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    id: { type: Type.STRING },
+                    style: { type: Type.STRING, enum: ['short-punchy', 'storytelling', 'seo-keyword-rich'] },
+                    title: { type: Type.STRING },
+                    text: { type: Type.STRING },
+                  },
+                  required: ['id', 'style', 'title', 'text'],
+                },
+              },
+              hashtags: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+              },
+              ctas: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    id: { type: Type.STRING },
+                    type: { type: Type.STRING, enum: ['comment', 'save-share', 'follow', 'link'] },
+                    title: { type: Type.STRING },
+                    text: { type: Type.STRING },
+                  },
+                  required: ['id', 'type', 'title', 'text'],
+                },
               },
             },
-            scenes: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  id: { type: Type.STRING },
-                  sceneNumber: { type: Type.NUMBER },
-                  durationSeconds: { type: Type.NUMBER },
-                  visualCue: { type: Type.STRING },
-                  audioVoiceover: { type: Type.STRING },
-                  onScreenText: { type: Type.STRING },
-                  bRollPrompt: { type: Type.STRING },
-                },
-                required: ['id', 'sceneNumber', 'durationSeconds', 'visualCue', 'audioVoiceover', 'onScreenText'],
-              },
-            },
-            captions: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  id: { type: Type.STRING },
-                  style: { type: Type.STRING, enum: ['short-punchy', 'storytelling', 'seo-keyword-rich'] },
-                  title: { type: Type.STRING },
-                  text: { type: Type.STRING },
-                },
-                required: ['id', 'style', 'title', 'text'],
-              },
-            },
-            hashtags: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-            },
-            ctas: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  id: { type: Type.STRING },
-                  type: { type: Type.STRING, enum: ['comment', 'save-share', 'follow', 'link'] },
-                  title: { type: Type.STRING },
-                  text: { type: Type.STRING },
-                },
-                required: ['id', 'type', 'title', 'text'],
-              },
-            },
+            required: ['title', 'hooks', 'scenes', 'captions', 'hashtags', 'ctas'],
           },
-          required: ['title', 'hooks', 'scenes', 'captions', 'hashtags', 'ctas'],
         },
-      },
-    });
+      })
+    );
 
     const parsed = JSON.parse(response.text || '{}');
     const now = new Date().toISOString();
@@ -244,9 +495,13 @@ Provide:
 
     return { project, statusCode: 200 };
   } catch (error: any) {
-    const safeMsg = sanitizeError(error);
-    console.error('Gemini Generation Error:', safeMsg);
-    throw new Error(safeMsg);
+    if (error instanceof GeminiServiceError) {
+      console.error(`Gemini Generation Error [${error.statusCode} ${error.category}]:`, error.message);
+      throw error;
+    }
+    const { statusCode, message, category } = categorizeGeminiError(error);
+    console.error(`Gemini Generation Error [${statusCode} ${category}]:`, message);
+    throw new GeminiServiceError(message, statusCode, category);
   }
 }
 
@@ -308,13 +563,15 @@ ${JSON.stringify({
 Return the updated project JSON with all fields preserved or updated appropriately according to the instruction.`;
 
   try {
-    const response = await aiClient.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: editPrompt,
-      config: {
-        responseMimeType: 'application/json',
-      },
-    });
+    const response = await executeWithRetry(() =>
+      aiClient.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: editPrompt,
+        config: {
+          responseMimeType: 'application/json',
+        },
+      })
+    );
 
     const parsed = JSON.parse(response.text || '{}');
     const merged: VideoProject = {
@@ -327,8 +584,12 @@ Return the updated project JSON with all fields preserved or updated appropriate
 
     return merged;
   } catch (error: any) {
-    const safeMsg = sanitizeError(error);
-    console.error('Gemini Quick Edit Error:', safeMsg);
-    throw new Error(safeMsg);
+    if (error instanceof GeminiServiceError) {
+      console.error(`Gemini Quick Edit Error [${error.statusCode} ${error.category}]:`, error.message);
+      throw error;
+    }
+    const { statusCode, message, category } = categorizeGeminiError(error);
+    console.error(`Gemini Quick Edit Error [${statusCode} ${category}]:`, message);
+    throw new GeminiServiceError(message, statusCode, category);
   }
 }
