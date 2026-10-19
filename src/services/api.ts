@@ -7,7 +7,7 @@ export interface ApiStatus {
 }
 
 // Configurable base URL for Firebase Cloud Functions backend or fallback relative /api
-export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
+export const API_BASE_URL = ((import.meta as any).env?.VITE_API_BASE_URL || '').replace(/\/+$/, '');
 
 export async function checkApiStatus(): Promise<ApiStatus> {
   try {

@@ -20,6 +20,7 @@ import {
 import { UserSettings, Platform, Tone, DurationOption, ThemeMode } from '../types';
 import { PLATFORM_INFO, TONE_LABELS, AVAILABLE_LANGUAGES } from '../services/templates';
 import { exportBackupData, importBackupData, clearAllLocalData } from '../services/storage';
+import { API_BASE_URL } from '../services/api';
 
 interface SettingsViewProps {
   settings: UserSettings;
@@ -390,7 +391,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
           <div className="flex flex-wrap gap-2.5">
             <a
-              href="/api/download-zip"
+              href={`${API_BASE_URL}/api/download-zip`}
               download="frame-ai.zip"
               className="flex items-center space-x-2 rounded-2xl border border-indigo-500/40 bg-indigo-50 dark:bg-indigo-950/30 px-4 py-2.5 text-xs font-semibold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-950/60 transition-all shadow-xs"
             >
