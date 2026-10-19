@@ -1,5 +1,6 @@
+
 {
   "projects": {
-    "default": "frame-ai"
+    "default": "frame-ai-backend"
   }
 }
