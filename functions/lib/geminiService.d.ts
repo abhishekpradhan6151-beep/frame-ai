@@ -2,6 +2,14 @@ import type { GoogleGenAI } from '@google/genai';
 import type { VideoProject, Platform, Tone, DurationOption, QuickEditRequest } from './types';
 export declare function getAiClient(): Promise<GoogleGenAI | null>;
 export declare function sanitizeError(error: any): string;
+export declare function isTransientError(error: any): boolean;
+export declare function extractRetryDelay(error: any): number | null;
+export interface RetryOptions {
+    maxRetries?: number;
+    initialDelayMs?: number;
+    maxDelayMs?: number;
+}
+export declare function executeWithRetry<T>(operation: () => Promise<T>, options?: RetryOptions): Promise<T>;
 export declare function getStatus(): {
     liveAiAvailable: boolean;
     model: string;
