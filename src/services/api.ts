@@ -6,9 +6,12 @@ export interface ApiStatus {
   model: string;
 }
 
+// Configurable base URL for Firebase Cloud Functions backend or fallback relative /api
+export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
+
 export async function checkApiStatus(): Promise<ApiStatus> {
   try {
-    const res = await fetch('/api/status');
+    const res = await fetch(`${API_BASE_URL}/api/status`);
     if (!res.ok) throw new Error('Status endpoint failed');
     return await res.json();
   } catch {
@@ -18,7 +21,7 @@ export async function checkApiStatus(): Promise<ApiStatus> {
 
 export async function generateProject(req: GenerateRequest): Promise<VideoProject> {
   try {
-    const res = await fetch('/api/generate', {
+    const res = await fetch(`${API_BASE_URL}/api/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(req),
@@ -51,7 +54,7 @@ export async function generateProject(req: GenerateRequest): Promise<VideoProjec
 
 export async function quickEditProject(req: QuickEditRequest): Promise<VideoProject> {
   try {
-    const res = await fetch('/api/quick-edit', {
+    const res = await fetch(`${API_BASE_URL}/api/quick-edit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(req),
