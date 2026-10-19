@@ -35,8 +35,9 @@ app.post('/api/generate', async (req, res) => {
     const result = await processGeneration(req.body);
     res.status(result.statusCode || 200).json(result.project);
   } catch (error: any) {
-    console.error('Error generating project:', error);
-    res.status(500).json({ error: error?.message || 'Failed to generate project' });
+    const statusCode = error?.statusCode || (typeof error?.status === 'number' ? error.status : 500);
+    console.error(`Error generating project [HTTP ${statusCode}]:`, error);
+    res.status(statusCode).json({ error: error?.message || 'Failed to generate project', category: error?.category || 'ERROR' });
   }
 });
 
@@ -46,8 +47,9 @@ app.post('/api/quick-edit', async (req, res) => {
     const updated = await processQuickEdit(req.body);
     res.json(updated);
   } catch (error: any) {
-    console.error('Quick edit error:', error);
-    res.status(500).json({ error: error?.message || 'Failed to process quick edit' });
+    const statusCode = error?.statusCode || (typeof error?.status === 'number' ? error.status : 500);
+    console.error(`Quick edit error [HTTP ${statusCode}]:`, error);
+    res.status(statusCode).json({ error: error?.message || 'Failed to process quick edit', category: error?.category || 'ERROR' });
   }
 });
 

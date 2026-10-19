@@ -35,6 +35,132 @@ export function sanitizeError(error: any): string {
   return message;
 }
 
+export type GeminiErrorCategory =
+  | 'SERVICE_UNAVAILABLE'
+  | 'RATE_LIMIT'
+  | 'TIMEOUT'
+  | 'AUTH_ERROR'
+  | 'INVALID_REQUEST'
+  | 'INTERNAL_ERROR';
+
+export class GeminiServiceError extends Error {
+  public statusCode: number;
+  public category: GeminiErrorCategory;
+
+  constructor(message: string, statusCode: number, category: GeminiErrorCategory) {
+    super(message);
+    this.name = 'GeminiServiceError';
+    this.statusCode = statusCode;
+    this.category = category;
+    Object.setPrototypeOf(this, GeminiServiceError.prototype);
+  }
+}
+
+export function categorizeGeminiError(error: any): {
+  statusCode: number;
+  message: string;
+  category: GeminiErrorCategory;
+} {
+  if (!error) {
+    return {
+      statusCode: 500,
+      message: 'An unexpected internal error occurred during generation.',
+      category: 'INTERNAL_ERROR',
+    };
+  }
+
+  const rawStatus =
+    error.statusCode ||
+    error.status ||
+    error.code ||
+    error.error?.code ||
+    error.error?.status;
+
+  const rawMessage =
+    typeof error.message === 'string'
+      ? error.message
+      : typeof error === 'string'
+      ? error
+      : JSON.stringify(error);
+
+  const cleanMessage = sanitizeError(rawMessage);
+
+  // 1. Auth & Configuration Errors (401, 403, PERMISSION_DENIED, UNAUTHENTICATED)
+  if (
+    rawStatus === 401 ||
+    rawStatus === 403 ||
+    rawStatus === 'PERMISSION_DENIED' ||
+    rawStatus === 'UNAUTHENTICATED' ||
+    /invalid api key|api key not valid|permission denied|unauthenticated/i.test(cleanMessage)
+  ) {
+    return {
+      statusCode: 401,
+      message: 'Gemini API key is invalid or not properly configured on the server.',
+      category: 'AUTH_ERROR',
+    };
+  }
+
+  // 2. Client / Validation / Invalid Request Errors (400, INVALID_ARGUMENT)
+  if (rawStatus === 400 || rawStatus === 'INVALID_ARGUMENT') {
+    return {
+      statusCode: 400,
+      message: `Invalid generation request: ${cleanMessage.slice(0, 150)}`,
+      category: 'INVALID_REQUEST',
+    };
+  }
+
+  // 3. Timeout Errors (504, DEADLINE_EXCEEDED, Gateway Timeout)
+  if (
+    rawStatus === 504 ||
+    rawStatus === 'DEADLINE_EXCEEDED' ||
+    /deadline exceeded|timed out|gateway timeout/i.test(cleanMessage)
+  ) {
+    return {
+      statusCode: 504,
+      message: 'The AI service timed out while generating your video framework. Please try again.',
+      category: 'TIMEOUT',
+    };
+  }
+
+  // 4. Rate Limit / Resource Exhausted (429, RESOURCE_EXHAUSTED)
+  if (
+    rawStatus === 429 ||
+    rawStatus === 'RESOURCE_EXHAUSTED' ||
+    /rate limit|too many requests|resource_exhausted/i.test(cleanMessage)
+  ) {
+    return {
+      statusCode: 429,
+      message: 'AI request rate limit reached. Please wait a moment before trying again.',
+      category: 'RATE_LIMIT',
+    };
+  }
+
+  // 5. High Demand / Service Unavailable (503, UNAVAILABLE)
+  if (
+    rawStatus === 503 ||
+    rawStatus === 'UNAVAILABLE' ||
+    /high demand|spikes in demand|temporarily unavailable|unavailable|overloaded|please try again later/i.test(cleanMessage)
+  ) {
+    return {
+      statusCode: 503,
+      message: 'AI service is temporarily experiencing high demand. Please try again in a few moments.',
+      category: 'SERVICE_UNAVAILABLE',
+    };
+  }
+
+  // Fallback / Internal server error
+  const numericStatus =
+    typeof rawStatus === 'number' && rawStatus >= 400 && rawStatus <= 599
+      ? rawStatus
+      : 500;
+
+  return {
+    statusCode: numericStatus,
+    message: cleanMessage || 'An unexpected error occurred during video package generation.',
+    category: 'INTERNAL_ERROR',
+  };
+}
+
 export function isTransientError(error: any): boolean {
   if (!error) return false;
 
@@ -67,13 +193,14 @@ export function isTransientError(error: any): boolean {
     return false;
   }
 
-  // Transient status codes and statuses
+  // Transient status codes and statuses: 503, 504, 429
   if (
     status === 503 ||
     status === 429 ||
     status === 504 ||
     status === 'UNAVAILABLE' ||
-    status === 'RESOURCE_EXHAUSTED'
+    status === 'RESOURCE_EXHAUSTED' ||
+    status === 'DEADLINE_EXCEEDED'
   ) {
     return true;
   }
@@ -144,16 +271,17 @@ export async function executeWithRetry<T>(
       const jitter = Math.random() * (backoff * 0.25);
       const delay = Math.min(serverDelay ?? (backoff + jitter), maxDelayMs);
 
+      const errorInfo = categorizeGeminiError(error);
+      console.warn(
+        `[Gemini Attempt ${attempt + 1}/${maxRetries + 1}] Upstream retryable error (${errorInfo.statusCode} ${errorInfo.category}). Retrying in ${Math.round(delay)}ms...`
+      );
+
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
 
-  if (isTransientError(lastError)) {
-    throw new Error('AI service is temporarily experiencing high demand. Please try again in a few moments.');
-  }
-
-  const safeMsg = sanitizeError(lastError);
-  throw new Error(safeMsg);
+  const { statusCode, message, category } = categorizeGeminiError(lastError);
+  throw new GeminiServiceError(message, statusCode, category);
 }
 
 export function isLiveAiConfigured(): boolean {
@@ -367,9 +495,13 @@ Provide:
 
     return { project, statusCode: 200 };
   } catch (error: any) {
-    const safeMsg = sanitizeError(error);
-    console.error('Gemini Generation Error:', safeMsg);
-    throw new Error(safeMsg);
+    if (error instanceof GeminiServiceError) {
+      console.error(`Gemini Generation Error [${error.statusCode} ${error.category}]:`, error.message);
+      throw error;
+    }
+    const { statusCode, message, category } = categorizeGeminiError(error);
+    console.error(`Gemini Generation Error [${statusCode} ${category}]:`, message);
+    throw new GeminiServiceError(message, statusCode, category);
   }
 }
 
@@ -452,8 +584,12 @@ Return the updated project JSON with all fields preserved or updated appropriate
 
     return merged;
   } catch (error: any) {
-    const safeMsg = sanitizeError(error);
-    console.error('Gemini Quick Edit Error:', safeMsg);
-    throw new Error(safeMsg);
+    if (error instanceof GeminiServiceError) {
+      console.error(`Gemini Quick Edit Error [${error.statusCode} ${error.category}]:`, error.message);
+      throw error;
+    }
+    const { statusCode, message, category } = categorizeGeminiError(error);
+    console.error(`Gemini Quick Edit Error [${statusCode} ${category}]:`, message);
+    throw new GeminiServiceError(message, statusCode, category);
   }
 }

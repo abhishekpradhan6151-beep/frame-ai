@@ -11,8 +11,9 @@ export default async function handler(req: any, res: any) {
     const result = await processGeneration(body);
     return res.status(result.statusCode || 200).json(result.project);
   } catch (error: any) {
+    const statusCode = error?.statusCode || (typeof error?.status === 'number' ? error.status : 500);
     const message = sanitizeError(error);
-    console.error('API /api/generate Error:', message);
-    return res.status(500).json({ error: message });
+    console.error(`API /api/generate Error [HTTP ${statusCode}]:`, message);
+    return res.status(statusCode).json({ error: message, category: error?.category || 'ERROR' });
   }
 }
