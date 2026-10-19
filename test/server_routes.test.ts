@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import {
@@ -205,6 +205,44 @@ describe('Vercel Serverless Function Endpoints (/api)', () => {
 
     expect(res._getStatusCode()).toBe(500);
     expect(res._getJson().error).toContain('idea is required');
+  });
+
+  it('POST /api/generate preserves 503 status code when AI service is unavailable', async () => {
+    const { GeminiServiceError } = await import('../api/_lib/geminiService.js');
+    const { req, res } = createMockReqRes({
+      method: 'POST',
+      body: { idea: 'Valid idea' },
+    });
+
+    const originalProcess = await import('../api/_lib/geminiService.js');
+    const spy = vi.spyOn(originalProcess, 'processGeneration').mockRejectedValueOnce(
+      new GeminiServiceError('AI service is temporarily experiencing high demand. Please try again in a few moments.', 503, 'SERVICE_UNAVAILABLE')
+    );
+
+    await generateHandler(req, res);
+    expect(res._getStatusCode()).toBe(503);
+    expect(res._getJson().error).toContain('temporarily experiencing high demand');
+    expect(res._getJson().category).toBe('SERVICE_UNAVAILABLE');
+    spy.mockRestore();
+  });
+
+  it('POST /api/generate preserves 429 status code for rate limits', async () => {
+    const { GeminiServiceError } = await import('../api/_lib/geminiService.js');
+    const { req, res } = createMockReqRes({
+      method: 'POST',
+      body: { idea: 'Valid idea' },
+    });
+
+    const originalProcess = await import('../api/_lib/geminiService.js');
+    const spy = vi.spyOn(originalProcess, 'processGeneration').mockRejectedValueOnce(
+      new GeminiServiceError('AI request rate limit reached. Please wait a moment before trying again.', 429, 'RATE_LIMIT')
+    );
+
+    await generateHandler(req, res);
+    expect(res._getStatusCode()).toBe(429);
+    expect(res._getJson().error).toContain('rate limit reached');
+    expect(res._getJson().category).toBe('RATE_LIMIT');
+    spy.mockRestore();
   });
 
   it('POST /api/quick-edit responds with 200 for valid edit action', async () => {
