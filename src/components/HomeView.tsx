@@ -181,13 +181,18 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </div>
 
         {/* 2. Main Headline */}
-        <h1 className="text-3xl sm:text-5xl md:text-[56px] lg:text-[60px] font-extrabold tracking-tight text-slate-900 dark:text-white leading-[1.1] max-w-2xl transition-colors duration-200">
-          Your next video starts here.
+        <h1 className="text-3xl sm:text-5xl md:text-[56px] lg:text-[60px] font-extrabold tracking-tight text-slate-900 dark:text-white leading-[1.08] max-w-2xl transition-colors duration-200">
+          Create videos people actually finish.
         </h1>
 
         {/* 3. Subtitle */}
         <p className="mt-3 sm:mt-4 text-base sm:text-lg md:text-[19px] text-slate-600 dark:text-zinc-400 font-normal tracking-normal max-w-xl transition-colors duration-200 leading-relaxed">
-          Turn an idea into content worth watching.
+          Turn an idea into a short-form script optimized for retention.
+        </p>
+
+        {/* 3b. Subtle Retention Hint */}
+        <p className="mt-2.5 sm:mt-3 text-xs sm:text-[13px] text-slate-500/90 dark:text-zinc-500 font-medium tracking-normal transition-colors duration-200 max-w-lg">
+          Every script comes with a live Retention DNA heat-map so you can fix drop-off points instantly.
         </p>
 
         {/* 4. Main Generation Composer */}
@@ -212,10 +217,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   if (error) setError(null);
                 }}
                 onKeyDown={handleKeyDown}
-                placeholder="What do you want to create a video about?"
+                placeholder="Describe your video idea… (e.g. ‘3 mistakes beginners make when starting a YouTube channel’)"
                 rows={3}
                 maxLength={800}
-                className="w-full resize-none bg-transparent text-base sm:text-[17px] md:text-lg text-slate-900 dark:text-zinc-100 placeholder:text-slate-400/90 dark:placeholder:text-zinc-500 focus:outline-none min-h-[110px] sm:min-h-[125px] leading-relaxed select-text transition-colors duration-200"
+                className="w-full resize-none bg-transparent text-base sm:text-[17px] md:text-lg text-slate-900 dark:text-zinc-100 placeholder:text-slate-400/80 dark:placeholder:text-zinc-500 focus:outline-none min-h-[110px] sm:min-h-[125px] leading-relaxed select-text transition-colors duration-200"
               />
             </div>
 
@@ -255,10 +260,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
             <div className="mt-4 flex flex-wrap items-center gap-2 pt-1">
               <span className="text-xs sm:text-[13px] font-semibold text-slate-500 dark:text-zinc-400 mr-1 hidden sm:inline">Try:</span>
               {[
-                '3 common mistakes beginners make in...',
-                'Stop doing this if you want to grow on...',
-                'Behind the scenes of building a product in 48 hours',
-                'The controversial truth about productivity hacks'
+                '3 mistakes that make people scroll past your videos',
+                'The one hook that stops the scroll every time',
+                'Why your content dies after 3 seconds (and how to fix it)',
+                'Behind the scenes of a video that got 2M views',
               ].map((suggestion, idx) => (
                 <button
                   key={idx}
@@ -303,7 +308,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   {isGenerating ? (
                     <>
                       <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                      <span>Generating...</span>
+                      <span>Crafting your script…</span>
                     </>
                   ) : cooldownSeconds > 0 ? (
                     <span>Wait ({cooldownSeconds}s)</span>
