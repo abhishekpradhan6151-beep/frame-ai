@@ -1,0 +1,544 @@
+From ea74119a47644bb98d4f169fb6fa97dcea4a0f89 Mon Sep 17 00:00:00 2001
+From: abhishekpradhan6151-beep <abhishekpradhan6151@gmail.com>
+Date: Tue, 20 Oct 2026 07:46:44 +0000
+Subject: [PATCH] fix(rate-limit): eliminate blind 429 retries, bound
+ cooldowns, and prevent duplicate generation requests
+
+---
+ api/_lib/geminiService.ts   | 139 +++++++++++++++++++++++++-----------
+ api/generate.ts             |   9 ++-
+ server.ts                   |   9 ++-
+ src/App.tsx                 |  11 ++-
+ src/components/HomeView.tsx |  34 +++++++--
+ test/gemini_retry.test.ts   | 100 +++++++++++++++++++++++---
+ 6 files changed, 247 insertions(+), 55 deletions(-)
+
+diff --git a/api/_lib/geminiService.ts b/api/_lib/geminiService.ts
+index c715449..785f551 100644
+--- a/api/_lib/geminiService.ts
++++ b/api/_lib/geminiService.ts
+@@ -46,20 +46,72 @@ export type GeminiErrorCategory =
+ export class GeminiServiceError extends Error {
+   public statusCode: number;
+   public category: GeminiErrorCategory;
++  public retryAfterSeconds?: number | null;
+ 
+-  constructor(message: string, statusCode: number, category: GeminiErrorCategory) {
++  constructor(
++    message: string,
++    statusCode: number,
++    category: GeminiErrorCategory,
++    retryAfterSeconds?: number | null
++  ) {
+     super(message);
+     this.name = 'GeminiServiceError';
+     this.statusCode = statusCode;
+     this.category = category;
++    this.retryAfterSeconds = retryAfterSeconds;
+     Object.setPrototypeOf(this, GeminiServiceError.prototype);
+   }
+ }
+ 
++export function extractRetryDelay(error: any): number | null {
++  if (!error) return null;
++
++  // 1. HTTP header Retry-After
++  const retryAfterHeader =
++    error.response?.headers?.get?.('retry-after') || error.headers?.['retry-after'];
++  if (retryAfterHeader) {
++    const parsed = parseFloat(retryAfterHeader);
++    if (!isNaN(parsed) && parsed > 0) {
++      return parsed * 1000;
++    }
++  }
++
++  // 2. Structured Google RPC RetryInfo in details
++  const details = error.error?.details || error.details;
++  if (Array.isArray(details)) {
++    for (const d of details) {
++      if (d && (d['@type']?.includes('RetryInfo') || d.retryDelay)) {
++        if (typeof d.retryDelay === 'string') {
++          const match = d.retryDelay.match(/([0-9.]+)\s*s?/i);
++          if (match) {
++            const sec = parseFloat(match[1]);
++            if (!isNaN(sec) && sec > 0) return sec * 1000;
++          }
++        } else if (typeof d.retryDelay?.seconds === 'number') {
++          return d.retryDelay.seconds * 1000;
++        }
++      }
++    }
++  }
++
++  // 3. Message text parsing for retry delay
++  const msg = typeof error.message === 'string' ? error.message : '';
++  const match = msg.match(/retry after\s+([0-9.]+)\s*s/i) || msg.match(/reset in\s+([0-9.]+)\s*s/i);
++  if (match) {
++    const sec = parseFloat(match[1]);
++    if (!isNaN(sec) && sec > 0) {
++      return sec * 1000;
++    }
++  }
++
++  return null;
++}
++
+ export function categorizeGeminiError(error: any): {
+   statusCode: number;
+   message: string;
+   category: GeminiErrorCategory;
++  retryAfterSeconds?: number | null;
+ } {
+   if (!error) {
+     return {
+@@ -128,10 +180,28 @@ export function categorizeGeminiError(error: any): {
+     rawStatus === 'RESOURCE_EXHAUSTED' ||
+     /rate limit|too many requests|resource_exhausted/i.test(cleanMessage)
+   ) {
++    const rawDelayMs = extractRetryDelay(error);
++    const retrySec =
++      rawDelayMs && Number.isFinite(rawDelayMs) && rawDelayMs > 0
++        ? Math.min(Math.ceil(rawDelayMs / 1000), 60)
++        : null;
++    let message = 'AI request rate limit reached. Please wait a moment before trying again.';
++
++    if (/input tokens|tokens per minute|tpm/i.test(cleanMessage)) {
++      message = 'AI token rate limit reached. Please shorten your idea or creative instructions and try again.';
++    } else if (/requests per day|daily/i.test(cleanMessage)) {
++      message = 'Daily AI generation quota reached for the configured API key. Please check your quota limits.';
++    } else if (rawDelayMs && rawDelayMs > 60000) {
++      message = 'AI generation quota limit exceeded. Please check your quota limits or try again later.';
++    } else if (retrySec && retrySec > 0) {
++      message = `AI request rate limit reached. Please wait ${retrySec} seconds before trying again.`;
++    }
++
+     return {
+       statusCode: 429,
+-      message: 'AI request rate limit reached. Please wait a moment before trying again.',
++      message,
+       category: 'RATE_LIMIT',
++      retryAfterSeconds: retrySec,
+     };
+   }
+ 
+@@ -193,53 +263,31 @@ export function isTransientError(error: any): boolean {
+     return false;
+   }
+ 
+-  // Transient status codes and statuses: 503, 504, 429
++  // 503 Service Unavailable / 504 Gateway Timeout: retryable
+   if (
+     status === 503 ||
+-    status === 429 ||
+     status === 504 ||
+     status === 'UNAVAILABLE' ||
+-    status === 'RESOURCE_EXHAUSTED' ||
+-    status === 'DEADLINE_EXCEEDED'
++    status === 'DEADLINE_EXCEEDED' ||
++    /high demand|spikes in demand|temporarily unavailable|unavailable|overloaded/i.test(message)
+   ) {
+     return true;
+   }
+ 
+-  // High demand or temporary unavailability text patterns
++  // 429 Rate Limit: only retry if server provides a short retry delay (<= 5s).
++  // Do NOT retry 429 blindly or rapidly without server guidance.
+   if (
+-    /high demand|spikes in demand|temporarily unavailable|unavailable|rate limit|quota exceeded|overloaded|please try again later/i.test(
+-      message
+-    )
++    status === 429 ||
++    status === 'RESOURCE_EXHAUSTED' ||
++    /rate limit|too many requests|resource_exhausted/i.test(message)
+   ) {
+-    return true;
++    const delay = extractRetryDelay(error);
++    return delay !== null && delay > 0 && delay <= 5000;
+   }
+ 
+   return false;
+ }
+ 
+-export function extractRetryDelay(error: any): number | null {
+-  if (!error) return null;
+-  const retryAfterHeader =
+-    error.response?.headers?.get?.('retry-after') || error.headers?.['retry-after'];
+-  if (retryAfterHeader) {
+-    const parsed = parseFloat(retryAfterHeader);
+-    if (!isNaN(parsed) && parsed > 0) {
+-      return Math.min(parsed * 1000, 5000);
+-    }
+-  }
+-
+-  const msg = typeof error.message === 'string' ? error.message : '';
+-  const match = msg.match(/retry after\s+([0-9.]+)\s*s/i);
+-  if (match) {
+-    const sec = parseFloat(match[1]);
+-    if (!isNaN(sec) && sec > 0) {
+-      return Math.min(sec * 1000, 5000);
+-    }
+-  }
+-
+-  return null;
+-}
+-
+ export interface RetryOptions {
+   maxRetries?: number;
+   initialDelayMs?: number;
+@@ -252,7 +300,7 @@ export async function executeWithRetry<T>(
+ ): Promise<T> {
+   const maxRetries = options.maxRetries ?? 2;
+   const initialDelayMs = options.initialDelayMs ?? 800;
+-  const maxDelayMs = options.maxDelayMs ?? 4000;
++  const maxDelayMs = options.maxDelayMs ?? 5000;
+ 
+   let lastError: any = null;
+ 
+@@ -267,9 +315,20 @@ export async function executeWithRetry<T>(
+       }
+ 
+       const serverDelay = extractRetryDelay(error);
+-      const backoff = Math.min(initialDelayMs * Math.pow(2, attempt), maxDelayMs);
+-      const jitter = Math.random() * (backoff * 0.25);
+-      const delay = Math.min(serverDelay ?? (backoff + jitter), maxDelayMs);
++      const isRateLimit =
++        error?.status === 429 ||
++        error?.code === 429 ||
++        error?.error?.code === 429 ||
++        error?.statusCode === 429;
++
++      // For 429 with explicit short retry delay, respect exact server delay without artificial exponential backoff
++      const delay =
++        isRateLimit && serverDelay
++          ? Math.min(serverDelay, maxDelayMs)
++          : Math.min(
++              initialDelayMs * Math.pow(2, attempt) + Math.random() * (initialDelayMs * 0.25),
++              maxDelayMs
++            );
+ 
+       const errorInfo = categorizeGeminiError(error);
+       console.warn(
+@@ -280,8 +339,8 @@ export async function executeWithRetry<T>(
+     }
+   }
+ 
+-  const { statusCode, message, category } = categorizeGeminiError(lastError);
+-  throw new GeminiServiceError(message, statusCode, category);
++  const { statusCode, message, category, retryAfterSeconds } = categorizeGeminiError(lastError);
++  throw new GeminiServiceError(message, statusCode, category, retryAfterSeconds);
+ }
+ 
+ export function isLiveAiConfigured(): boolean {
+diff --git a/api/generate.ts b/api/generate.ts
+index f7f294b..6eb1e35 100644
+--- a/api/generate.ts
++++ b/api/generate.ts
+@@ -13,7 +13,14 @@ export default async function handler(req: any, res: any) {
+   } catch (error: any) {
+     const statusCode = error?.statusCode || (typeof error?.status === 'number' ? error.status : 500);
+     const message = sanitizeError(error);
++    if (error?.retryAfterSeconds) {
++      res.setHeader('Retry-After', String(error.retryAfterSeconds));
++    }
+     console.error(`API /api/generate Error [HTTP ${statusCode}]:`, message);
+-    return res.status(statusCode).json({ error: message, category: error?.category || 'ERROR' });
++    return res.status(statusCode).json({
++      error: message,
++      category: error?.category || 'ERROR',
++      retryAfterSeconds: error?.retryAfterSeconds || null,
++    });
+   }
+ }
+diff --git a/server.ts b/server.ts
+index e2faf6b..844b1eb 100644
+--- a/server.ts
++++ b/server.ts
+@@ -36,8 +36,15 @@ app.post('/api/generate', async (req, res) => {
+     res.status(result.statusCode || 200).json(result.project);
+   } catch (error: any) {
+     const statusCode = error?.statusCode || (typeof error?.status === 'number' ? error.status : 500);
++    if (error?.retryAfterSeconds) {
++      res.setHeader('Retry-After', String(error.retryAfterSeconds));
++    }
+     console.error(`Error generating project [HTTP ${statusCode}]:`, error);
+-    res.status(statusCode).json({ error: error?.message || 'Failed to generate project', category: error?.category || 'ERROR' });
++    res.status(statusCode).json({
++      error: error?.message || 'Failed to generate project',
++      category: error?.category || 'ERROR',
++      retryAfterSeconds: error?.retryAfterSeconds || null,
++    });
+   }
+ });
+ 
+diff --git a/src/App.tsx b/src/App.tsx
+index 434eb88..06c670d 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -1,4 +1,4 @@
+-import React, { useState, useEffect } from 'react';
++import React, { useState, useEffect, useRef } from 'react';
+ import { Navbar } from './components/Navbar';
+ import { HomeView } from './components/HomeView';
+ import { StudioView } from './components/StudioView';
+@@ -38,6 +38,7 @@ export function App() {
+   }, []);
+ 
+   const [generationError, setGenerationError] = useState<string | null>(null);
++  const isGeneratingRef = useRef(false);
+ 
+   const handleGenerate = async (params: {
+     idea: string;
+@@ -47,6 +48,13 @@ export function App() {
+     language: string;
+     customInstructions?: string;
+   }) => {
++    // Synchronously guard against accidental double-clicks or duplicate dispatches
++    if (isGeneratingRef.current) {
++      console.warn('Generation already in progress. Ignoring duplicate call.');
++      return;
++    }
++
++    isGeneratingRef.current = true;
+     setIsGenerating(true);
+     setGenerationError(null);
+     try {
+@@ -66,6 +74,7 @@ export function App() {
+         err?.message || 'AI Generation request failed. Please check your backend connection or switch to Demo Mode in Settings.'
+       );
+     } finally {
++      isGeneratingRef.current = false;
+       setIsGenerating(false);
+     }
+   };
+diff --git a/src/components/HomeView.tsx b/src/components/HomeView.tsx
+index 528ecd1..a7a0151 100644
+--- a/src/components/HomeView.tsx
++++ b/src/components/HomeView.tsx
+@@ -65,6 +65,30 @@ export const HomeView: React.FC<HomeViewProps> = ({
+ 
+   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+   const [error, setError] = useState<string | null>(null);
++  const [cooldownSeconds, setCooldownSeconds] = useState(0);
++
++  // Trigger cooldown if a rate limit or wait duration is indicated
++  useEffect(() => {
++    if (generationError) {
++      const match = generationError.match(/wait\s+(\d+)\s*sec/i);
++      const seconds = match
++        ? Math.min(Math.max(parseInt(match[1], 10), 1), 60)
++        : generationError.toLowerCase().includes('rate limit')
++        ? 10
++        : 0;
++      if (seconds > 0) {
++        setCooldownSeconds(seconds);
++      }
++    }
++  }, [generationError]);
++
++  useEffect(() => {
++    if (cooldownSeconds <= 0) return;
++    const timer = setInterval(() => {
++      setCooldownSeconds((prev) => (prev > 1 ? prev - 1 : 0));
++    }, 1000);
++    return () => clearInterval(timer);
++  }, [cooldownSeconds]);
+ 
+   // Temporary state for the modal until user hits "Done"
+   const [tempPlatform, setTempPlatform] = useState<Platform>(platform);
+@@ -113,7 +137,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
+       setError('Please provide at least a few words describing your video concept.');
+       return;
+     }
+-    if (isGenerating) return;
++    if (isGenerating || cooldownSeconds > 0) return;
+ 
+     setError(null);
+     onGenerate({
+@@ -206,11 +230,11 @@ export const HomeView: React.FC<HomeViewProps> = ({
+                   <div className="flex items-center gap-2 shrink-0">
+                     <button
+                       type="button"
+-                      disabled={isGenerating}
++                      disabled={isGenerating || cooldownSeconds > 0}
+                       onClick={handleSubmit}
+                       className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-600 dark:text-rose-300 transition-colors disabled:opacity-50 cursor-pointer"
+                     >
+-                      Retry
++                      {cooldownSeconds > 0 ? `Wait (${cooldownSeconds}s)` : 'Retry'}
+                     </button>
+                     {onClearGenerationError && (
+                       <button
+@@ -273,7 +297,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
+                 </span>
+                 <button
+                   type="submit"
+-                  disabled={isGenerating}
++                  disabled={isGenerating || cooldownSeconds > 0}
+                   className="rounded-full bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:hover:bg-zinc-100 dark:text-zinc-950 font-semibold px-6 sm:px-7 py-3 sm:py-3.5 text-sm sm:text-base transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 shrink-0 w-full sm:w-auto min-h-[46px] sm:min-h-[48px] disabled:opacity-50 cursor-pointer border border-[var(--border-subtle)]"
+                 >
+                   {isGenerating ? (
+@@ -281,6 +305,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
+                       <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                       <span>Generating...</span>
+                     </>
++                  ) : cooldownSeconds > 0 ? (
++                    <span>Wait ({cooldownSeconds}s)</span>
+                   ) : (
+                     <>
+                       <span>Generate content</span>
+diff --git a/test/gemini_retry.test.ts b/test/gemini_retry.test.ts
+index 26ee085..f023dd7 100644
+--- a/test/gemini_retry.test.ts
++++ b/test/gemini_retry.test.ts
+@@ -32,6 +32,41 @@ describe('Gemini Production Error Handling & Status Preservation', () => {
+       expect(cat.category).toBe('RATE_LIMIT');
+       expect(cat.message).toBe('AI request rate limit reached. Please wait a moment before trying again.');
+       expect(cat.message).not.toContain('daily quota is exhausted');
++      expect(cat.message).not.toContain('Daily AI generation quota');
++    });
++
++    it('Scenario: maps 429 token limit error accurately without generic message', () => {
++      const err = {
++        status: 429,
++        message: 'RESOURCE_EXHAUSTED: Quota exceeded for input tokens per minute (TPM)',
++      };
++      const cat = categorizeGeminiError(err);
++      expect(cat.statusCode).toBe(429);
++      expect(cat.category).toBe('RATE_LIMIT');
++      expect(cat.message).toBe('AI token rate limit reached. Please shorten your idea or creative instructions and try again.');
++    });
++
++    it('Scenario: maps 429 daily quota error accurately', () => {
++      const err = {
++        status: 429,
++        message: 'RESOURCE_EXHAUSTED: Online prediction requests per day quota exceeded',
++      };
++      const cat = categorizeGeminiError(err);
++      expect(cat.statusCode).toBe(429);
++      expect(cat.category).toBe('RATE_LIMIT');
++      expect(cat.message).toContain('Daily AI generation quota reached');
++    });
++
++    it('Scenario: maps 429 with server retry delay accurately', () => {
++      const err = {
++        status: 429,
++        message: 'RESOURCE_EXHAUSTED: Please retry after 15s',
++      };
++      const cat = categorizeGeminiError(err);
++      expect(cat.statusCode).toBe(429);
++      expect(cat.category).toBe('RATE_LIMIT');
++      expect(cat.message).toContain('15 seconds');
++      expect(cat.retryAfterSeconds).toBe(15);
+     });
+ 
+     it('Scenario: maps 504 DEADLINE_EXCEEDED to HTTP 504 with timeout message', () => {
+@@ -69,8 +104,8 @@ describe('Gemini Production Error Handling & Status Preservation', () => {
+     });
+   });
+ 
+-  describe('isTransientError classification', () => {
+-    it('identifies 503 high demand error as transient', () => {
++  describe('isTransientError classification & Non-blind 429 retries', () => {
++    it('identifies 503 high demand error as transient and retryable', () => {
+       const error503 = {
+         code: 503,
+         status: 'UNAVAILABLE',
+@@ -79,12 +114,29 @@ describe('Gemini Production Error Handling & Status Preservation', () => {
+       expect(isTransientError(error503)).toBe(true);
+     });
+ 
+-    it('identifies 429 rate limit error as transient', () => {
++    it('does NOT retry 429 blindly when no short server retry delay is provided', () => {
+       const error429 = {
+         status: 429,
+         message: 'RESOURCE_EXHAUSTED: rate limit exceeded',
+       };
+-      expect(isTransientError(error429)).toBe(true);
++      // Without short retry delay, 429 is not blindly retried within function lifecycle
++      expect(isTransientError(error429)).toBe(false);
++    });
++
++    it('identifies 429 as retryable ONLY when server explicitly provides a short retry delay (<= 5s)', () => {
++      const error429WithShortDelay = {
++        status: 429,
++        message: 'RESOURCE_EXHAUSTED: Please retry after 2s',
++      };
++      expect(isTransientError(error429WithShortDelay)).toBe(true);
++    });
++
++    it('does NOT retry 429 when server delay is large (> 5s)', () => {
++      const error429WithLongDelay = {
++        status: 429,
++        message: 'RESOURCE_EXHAUSTED: Please retry after 45s',
++      };
++      expect(isTransientError(error429WithLongDelay)).toBe(false);
+     });
+ 
+     it('identifies 504 timeout error as transient', () => {
+@@ -122,9 +174,18 @@ describe('Gemini Production Error Handling & Status Preservation', () => {
+       expect(extractRetryDelay(err)).toBe(3000);
+     });
+ 
+-    it('caps retry delay to safe maximum', () => {
+-      const err = { message: 'Please retry after 45s' };
+-      expect(extractRetryDelay(err)).toBe(5000);
++    it('extracts retry delay from Google RPC details object', () => {
++      const err = {
++        error: {
++          details: [
++            {
++              '@type': 'type.googleapis.com/google.rpc.RetryInfo',
++              retryDelay: '4s',
++            },
++          ],
++        },
++      };
++      expect(extractRetryDelay(err)).toBe(4000);
+     });
+   });
+ 
+@@ -188,7 +249,7 @@ describe('Gemini Production Error Handling & Status Preservation', () => {
+       }
+     });
+ 
+-    it('Requirement 7.4: 429 without falsely claiming daily quota exhaustion preserves HTTP 429 status', async () => {
++    it('Requirement 7.4: 429 without server retry delay fails immediately on attempt 1 without rapid blind retrying', async () => {
+       const rateLimitError = {
+         status: 429,
+         statusText: 'Too Many Requests',
+@@ -210,9 +271,32 @@ describe('Gemini Production Error Handling & Status Preservation', () => {
+         expect(err.category).toBe('RATE_LIMIT');
+         expect(err.message).toBe('AI request rate limit reached. Please wait a moment before trying again.');
+         expect(err.message).not.toContain('daily quota');
++        // Crucial: NOT retried blindly
++        expect(mockOp).toHaveBeenCalledTimes(1);
+       }
+     });
+ 
++    it('Requirement 7.4b: 429 with short server retry delay (<= 5s) retries once respecting server delay', async () => {
++      const rateLimitWithDelay = {
++        status: 429,
++        message: 'RESOURCE_EXHAUSTED: Rate limit exceeded. Please retry after 1s',
++      };
++
++      const mockOp = vi
++        .fn()
++        .mockRejectedValueOnce(rateLimitWithDelay)
++        .mockResolvedValueOnce({ text: '{"title":"Recovered After Rate Limit"}' });
++
++      const result = await executeWithRetry(mockOp, {
++        maxRetries: 2,
++        initialDelayMs: 10,
++        maxDelayMs: 2000,
++      });
++
++      expect(result).toEqual({ text: '{"title":"Recovered After Rate Limit"}' });
++      expect(mockOp).toHaveBeenCalledTimes(2);
++    });
++
+     it('Requirement 7.5: 504 timeout preserves HTTP 504 status', async () => {
+       const timeoutError = {
+         status: 504,
+-- 
+2.34.1
+
