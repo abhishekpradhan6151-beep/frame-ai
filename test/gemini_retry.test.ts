@@ -32,6 +32,41 @@ describe('Gemini Production Error Handling & Status Preservation', () => {
       expect(cat.category).toBe('RATE_LIMIT');
       expect(cat.message).toBe('AI request rate limit reached. Please wait a moment before trying again.');
       expect(cat.message).not.toContain('daily quota is exhausted');
+      expect(cat.message).not.toContain('Daily AI generation quota');
+    });
+
+    it('Scenario: maps 429 token limit error accurately without generic message', () => {
+      const err = {
+        status: 429,
+        message: 'RESOURCE_EXHAUSTED: Quota exceeded for input tokens per minute (TPM)',
+      };
+      const cat = categorizeGeminiError(err);
+      expect(cat.statusCode).toBe(429);
+      expect(cat.category).toBe('RATE_LIMIT');
+      expect(cat.message).toBe('AI token rate limit reached. Please shorten your idea or creative instructions and try again.');
+    });
+
+    it('Scenario: maps 429 daily quota error accurately', () => {
+      const err = {
+        status: 429,
+        message: 'RESOURCE_EXHAUSTED: Online prediction requests per day quota exceeded',
+      };
+      const cat = categorizeGeminiError(err);
+      expect(cat.statusCode).toBe(429);
+      expect(cat.category).toBe('RATE_LIMIT');
+      expect(cat.message).toContain('Daily AI generation quota reached');
+    });
+
+    it('Scenario: maps 429 with server retry delay accurately', () => {
+      const err = {
+        status: 429,
+        message: 'RESOURCE_EXHAUSTED: Please retry after 15s',
+      };
+      const cat = categorizeGeminiError(err);
+      expect(cat.statusCode).toBe(429);
+      expect(cat.category).toBe('RATE_LIMIT');
+      expect(cat.message).toContain('15 seconds');
+      expect(cat.retryAfterSeconds).toBe(15);
     });
 
     it('Scenario: maps 504 DEADLINE_EXCEEDED to HTTP 504 with timeout message', () => {
@@ -69,8 +104,8 @@ describe('Gemini Production Error Handling & Status Preservation', () => {
     });
   });
 
-  describe('isTransientError classification', () => {
-    it('identifies 503 high demand error as transient', () => {
+  describe('isTransientError classification & Non-blind 429 retries', () => {
+    it('identifies 503 high demand error as transient and retryable', () => {
       const error503 = {
         code: 503,
         status: 'UNAVAILABLE',
@@ -79,12 +114,29 @@ describe('Gemini Production Error Handling & Status Preservation', () => {
       expect(isTransientError(error503)).toBe(true);
     });
 
-    it('identifies 429 rate limit error as transient', () => {
+    it('does NOT retry 429 blindly when no short server retry delay is provided', () => {
       const error429 = {
         status: 429,
         message: 'RESOURCE_EXHAUSTED: rate limit exceeded',
       };
-      expect(isTransientError(error429)).toBe(true);
+      // Without short retry delay, 429 is not blindly retried within function lifecycle
+      expect(isTransientError(error429)).toBe(false);
+    });
+
+    it('identifies 429 as retryable ONLY when server explicitly provides a short retry delay (<= 5s)', () => {
+      const error429WithShortDelay = {
+        status: 429,
+        message: 'RESOURCE_EXHAUSTED: Please retry after 2s',
+      };
+      expect(isTransientError(error429WithShortDelay)).toBe(true);
+    });
+
+    it('does NOT retry 429 when server delay is large (> 5s)', () => {
+      const error429WithLongDelay = {
+        status: 429,
+        message: 'RESOURCE_EXHAUSTED: Please retry after 45s',
+      };
+      expect(isTransientError(error429WithLongDelay)).toBe(false);
     });
 
     it('identifies 504 timeout error as transient', () => {
@@ -122,9 +174,18 @@ describe('Gemini Production Error Handling & Status Preservation', () => {
       expect(extractRetryDelay(err)).toBe(3000);
     });
 
-    it('caps retry delay to safe maximum', () => {
-      const err = { message: 'Please retry after 45s' };
-      expect(extractRetryDelay(err)).toBe(5000);
+    it('extracts retry delay from Google RPC details object', () => {
+      const err = {
+        error: {
+          details: [
+            {
+              '@type': 'type.googleapis.com/google.rpc.RetryInfo',
+              retryDelay: '4s',
+            },
+          ],
+        },
+      };
+      expect(extractRetryDelay(err)).toBe(4000);
     });
   });
 
@@ -188,7 +249,7 @@ describe('Gemini Production Error Handling & Status Preservation', () => {
       }
     });
 
-    it('Requirement 7.4: 429 without falsely claiming daily quota exhaustion preserves HTTP 429 status', async () => {
+    it('Requirement 7.4: 429 without server retry delay fails immediately on attempt 1 without rapid blind retrying', async () => {
       const rateLimitError = {
         status: 429,
         statusText: 'Too Many Requests',
@@ -210,7 +271,30 @@ describe('Gemini Production Error Handling & Status Preservation', () => {
         expect(err.category).toBe('RATE_LIMIT');
         expect(err.message).toBe('AI request rate limit reached. Please wait a moment before trying again.');
         expect(err.message).not.toContain('daily quota');
+        // Crucial: NOT retried blindly
+        expect(mockOp).toHaveBeenCalledTimes(1);
       }
+    });
+
+    it('Requirement 7.4b: 429 with short server retry delay (<= 5s) retries once respecting server delay', async () => {
+      const rateLimitWithDelay = {
+        status: 429,
+        message: 'RESOURCE_EXHAUSTED: Rate limit exceeded. Please retry after 1s',
+      };
+
+      const mockOp = vi
+        .fn()
+        .mockRejectedValueOnce(rateLimitWithDelay)
+        .mockResolvedValueOnce({ text: '{"title":"Recovered After Rate Limit"}' });
+
+      const result = await executeWithRetry(mockOp, {
+        maxRetries: 2,
+        initialDelayMs: 10,
+        maxDelayMs: 2000,
+      });
+
+      expect(result).toEqual({ text: '{"title":"Recovered After Rate Limit"}' });
+      expect(mockOp).toHaveBeenCalledTimes(2);
     });
 
     it('Requirement 7.5: 504 timeout preserves HTTP 504 status', async () => {

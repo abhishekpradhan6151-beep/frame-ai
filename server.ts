@@ -36,8 +36,15 @@ app.post('/api/generate', async (req, res) => {
     res.status(result.statusCode || 200).json(result.project);
   } catch (error: any) {
     const statusCode = error?.statusCode || (typeof error?.status === 'number' ? error.status : 500);
+    if (error?.retryAfterSeconds) {
+      res.setHeader('Retry-After', String(error.retryAfterSeconds));
+    }
     console.error(`Error generating project [HTTP ${statusCode}]:`, error);
-    res.status(statusCode).json({ error: error?.message || 'Failed to generate project', category: error?.category || 'ERROR' });
+    res.status(statusCode).json({
+      error: error?.message || 'Failed to generate project',
+      category: error?.category || 'ERROR',
+      retryAfterSeconds: error?.retryAfterSeconds || null,
+    });
   }
 });
 

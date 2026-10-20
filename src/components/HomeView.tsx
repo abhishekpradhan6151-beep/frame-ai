@@ -65,6 +65,30 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
+
+  // Trigger cooldown if a rate limit or wait duration is indicated
+  useEffect(() => {
+    if (generationError) {
+      const match = generationError.match(/wait\s+(\d+)\s*sec/i);
+      const seconds = match
+        ? Math.min(Math.max(parseInt(match[1], 10), 1), 60)
+        : generationError.toLowerCase().includes('rate limit')
+        ? 10
+        : 0;
+      if (seconds > 0) {
+        setCooldownSeconds(seconds);
+      }
+    }
+  }, [generationError]);
+
+  useEffect(() => {
+    if (cooldownSeconds <= 0) return;
+    const timer = setInterval(() => {
+      setCooldownSeconds((prev) => (prev > 1 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [cooldownSeconds]);
 
   // Temporary state for the modal until user hits "Done"
   const [tempPlatform, setTempPlatform] = useState<Platform>(platform);
@@ -113,7 +137,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
       setError('Please provide at least a few words describing your video concept.');
       return;
     }
-    if (isGenerating) return;
+    if (isGenerating || cooldownSeconds > 0) return;
 
     setError(null);
     onGenerate({
@@ -206,11 +230,11 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   <div className="flex items-center gap-2 shrink-0">
                     <button
                       type="button"
-                      disabled={isGenerating}
+                      disabled={isGenerating || cooldownSeconds > 0}
                       onClick={handleSubmit}
                       className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-600 dark:text-rose-300 transition-colors disabled:opacity-50 cursor-pointer"
                     >
-                      Retry
+                      {cooldownSeconds > 0 ? `Wait (${cooldownSeconds}s)` : 'Retry'}
                     </button>
                     {onClearGenerationError && (
                       <button
@@ -273,7 +297,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 </span>
                 <button
                   type="submit"
-                  disabled={isGenerating}
+                  disabled={isGenerating || cooldownSeconds > 0}
                   className="rounded-full bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:hover:bg-zinc-100 dark:text-zinc-950 font-semibold px-6 sm:px-7 py-3 sm:py-3.5 text-sm sm:text-base transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 shrink-0 w-full sm:w-auto min-h-[46px] sm:min-h-[48px] disabled:opacity-50 cursor-pointer border border-[var(--border-subtle)]"
                 >
                   {isGenerating ? (
@@ -281,6 +305,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
                       <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
                       <span>Generating...</span>
                     </>
+                  ) : cooldownSeconds > 0 ? (
+                    <span>Wait ({cooldownSeconds}s)</span>
                   ) : (
                     <>
                       <span>Generate content</span>

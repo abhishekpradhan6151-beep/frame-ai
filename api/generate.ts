@@ -13,7 +13,14 @@ export default async function handler(req: any, res: any) {
   } catch (error: any) {
     const statusCode = error?.statusCode || (typeof error?.status === 'number' ? error.status : 500);
     const message = sanitizeError(error);
+    if (error?.retryAfterSeconds) {
+      res.setHeader('Retry-After', String(error.retryAfterSeconds));
+    }
     console.error(`API /api/generate Error [HTTP ${statusCode}]:`, message);
-    return res.status(statusCode).json({ error: message, category: error?.category || 'ERROR' });
+    return res.status(statusCode).json({
+      error: message,
+      category: error?.category || 'ERROR',
+      retryAfterSeconds: error?.retryAfterSeconds || null,
+    });
   }
 }
