@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Navbar } from './components/Navbar';
 import { HomeView } from './components/HomeView';
 import { StudioView } from './components/StudioView';
@@ -38,6 +38,7 @@ export function App() {
   }, []);
 
   const [generationError, setGenerationError] = useState<string | null>(null);
+  const isGeneratingRef = useRef(false);
 
   const handleGenerate = async (params: {
     idea: string;
@@ -47,6 +48,13 @@ export function App() {
     language: string;
     customInstructions?: string;
   }) => {
+    // Synchronously guard against accidental double-clicks or duplicate dispatches
+    if (isGeneratingRef.current) {
+      console.warn('Generation already in progress. Ignoring duplicate call.');
+      return;
+    }
+
+    isGeneratingRef.current = true;
     setIsGenerating(true);
     setGenerationError(null);
     try {
@@ -66,6 +74,7 @@ export function App() {
         err?.message || 'AI Generation request failed. Please check your backend connection or switch to Demo Mode in Settings.'
       );
     } finally {
+      isGeneratingRef.current = false;
       setIsGenerating(false);
     }
   };

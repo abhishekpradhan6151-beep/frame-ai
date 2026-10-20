@@ -46,20 +46,72 @@ export type GeminiErrorCategory =
 export class GeminiServiceError extends Error {
   public statusCode: number;
   public category: GeminiErrorCategory;
+  public retryAfterSeconds?: number | null;
 
-  constructor(message: string, statusCode: number, category: GeminiErrorCategory) {
+  constructor(
+    message: string,
+    statusCode: number,
+    category: GeminiErrorCategory,
+    retryAfterSeconds?: number | null
+  ) {
     super(message);
     this.name = 'GeminiServiceError';
     this.statusCode = statusCode;
     this.category = category;
+    this.retryAfterSeconds = retryAfterSeconds;
     Object.setPrototypeOf(this, GeminiServiceError.prototype);
   }
+}
+
+export function extractRetryDelay(error: any): number | null {
+  if (!error) return null;
+
+  // 1. HTTP header Retry-After
+  const retryAfterHeader =
+    error.response?.headers?.get?.('retry-after') || error.headers?.['retry-after'];
+  if (retryAfterHeader) {
+    const parsed = parseFloat(retryAfterHeader);
+    if (!isNaN(parsed) && parsed > 0) {
+      return parsed * 1000;
+    }
+  }
+
+  // 2. Structured Google RPC RetryInfo in details
+  const details = error.error?.details || error.details;
+  if (Array.isArray(details)) {
+    for (const d of details) {
+      if (d && (d['@type']?.includes('RetryInfo') || d.retryDelay)) {
+        if (typeof d.retryDelay === 'string') {
+          const match = d.retryDelay.match(/([0-9.]+)\s*s?/i);
+          if (match) {
+            const sec = parseFloat(match[1]);
+            if (!isNaN(sec) && sec > 0) return sec * 1000;
+          }
+        } else if (typeof d.retryDelay?.seconds === 'number') {
+          return d.retryDelay.seconds * 1000;
+        }
+      }
+    }
+  }
+
+  // 3. Message text parsing for retry delay
+  const msg = typeof error.message === 'string' ? error.message : '';
+  const match = msg.match(/retry after\s+([0-9.]+)\s*s/i) || msg.match(/reset in\s+([0-9.]+)\s*s/i);
+  if (match) {
+    const sec = parseFloat(match[1]);
+    if (!isNaN(sec) && sec > 0) {
+      return sec * 1000;
+    }
+  }
+
+  return null;
 }
 
 export function categorizeGeminiError(error: any): {
   statusCode: number;
   message: string;
   category: GeminiErrorCategory;
+  retryAfterSeconds?: number | null;
 } {
   if (!error) {
     return {
@@ -128,10 +180,28 @@ export function categorizeGeminiError(error: any): {
     rawStatus === 'RESOURCE_EXHAUSTED' ||
     /rate limit|too many requests|resource_exhausted/i.test(cleanMessage)
   ) {
+    const rawDelayMs = extractRetryDelay(error);
+    const retrySec =
+      rawDelayMs && Number.isFinite(rawDelayMs) && rawDelayMs > 0
+        ? Math.min(Math.ceil(rawDelayMs / 1000), 60)
+        : null;
+    let message = 'AI request rate limit reached. Please wait a moment before trying again.';
+
+    if (/input tokens|tokens per minute|tpm/i.test(cleanMessage)) {
+      message = 'AI token rate limit reached. Please shorten your idea or creative instructions and try again.';
+    } else if (/requests per day|daily/i.test(cleanMessage)) {
+      message = 'Daily AI generation quota reached for the configured API key. Please check your quota limits.';
+    } else if (rawDelayMs && rawDelayMs > 60000) {
+      message = 'AI generation quota limit exceeded. Please check your quota limits or try again later.';
+    } else if (retrySec && retrySec > 0) {
+      message = `AI request rate limit reached. Please wait ${retrySec} seconds before trying again.`;
+    }
+
     return {
       statusCode: 429,
-      message: 'AI request rate limit reached. Please wait a moment before trying again.',
+      message,
       category: 'RATE_LIMIT',
+      retryAfterSeconds: retrySec,
     };
   }
 
@@ -193,51 +263,29 @@ export function isTransientError(error: any): boolean {
     return false;
   }
 
-  // Transient status codes and statuses: 503, 504, 429
+  // 503 Service Unavailable / 504 Gateway Timeout: retryable
   if (
     status === 503 ||
-    status === 429 ||
     status === 504 ||
     status === 'UNAVAILABLE' ||
-    status === 'RESOURCE_EXHAUSTED' ||
-    status === 'DEADLINE_EXCEEDED'
+    status === 'DEADLINE_EXCEEDED' ||
+    /high demand|spikes in demand|temporarily unavailable|unavailable|overloaded/i.test(message)
   ) {
     return true;
   }
 
-  // High demand or temporary unavailability text patterns
+  // 429 Rate Limit: only retry if server provides a short retry delay (<= 5s).
+  // Do NOT retry 429 blindly or rapidly without server guidance.
   if (
-    /high demand|spikes in demand|temporarily unavailable|unavailable|rate limit|quota exceeded|overloaded|please try again later/i.test(
-      message
-    )
+    status === 429 ||
+    status === 'RESOURCE_EXHAUSTED' ||
+    /rate limit|too many requests|resource_exhausted/i.test(message)
   ) {
-    return true;
+    const delay = extractRetryDelay(error);
+    return delay !== null && delay > 0 && delay <= 5000;
   }
 
   return false;
-}
-
-export function extractRetryDelay(error: any): number | null {
-  if (!error) return null;
-  const retryAfterHeader =
-    error.response?.headers?.get?.('retry-after') || error.headers?.['retry-after'];
-  if (retryAfterHeader) {
-    const parsed = parseFloat(retryAfterHeader);
-    if (!isNaN(parsed) && parsed > 0) {
-      return Math.min(parsed * 1000, 5000);
-    }
-  }
-
-  const msg = typeof error.message === 'string' ? error.message : '';
-  const match = msg.match(/retry after\s+([0-9.]+)\s*s/i);
-  if (match) {
-    const sec = parseFloat(match[1]);
-    if (!isNaN(sec) && sec > 0) {
-      return Math.min(sec * 1000, 5000);
-    }
-  }
-
-  return null;
 }
 
 export interface RetryOptions {
@@ -252,7 +300,7 @@ export async function executeWithRetry<T>(
 ): Promise<T> {
   const maxRetries = options.maxRetries ?? 2;
   const initialDelayMs = options.initialDelayMs ?? 800;
-  const maxDelayMs = options.maxDelayMs ?? 4000;
+  const maxDelayMs = options.maxDelayMs ?? 5000;
 
   let lastError: any = null;
 
@@ -267,9 +315,20 @@ export async function executeWithRetry<T>(
       }
 
       const serverDelay = extractRetryDelay(error);
-      const backoff = Math.min(initialDelayMs * Math.pow(2, attempt), maxDelayMs);
-      const jitter = Math.random() * (backoff * 0.25);
-      const delay = Math.min(serverDelay ?? (backoff + jitter), maxDelayMs);
+      const isRateLimit =
+        error?.status === 429 ||
+        error?.code === 429 ||
+        error?.error?.code === 429 ||
+        error?.statusCode === 429;
+
+      // For 429 with explicit short retry delay, respect exact server delay without artificial exponential backoff
+      const delay =
+        isRateLimit && serverDelay
+          ? Math.min(serverDelay, maxDelayMs)
+          : Math.min(
+              initialDelayMs * Math.pow(2, attempt) + Math.random() * (initialDelayMs * 0.25),
+              maxDelayMs
+            );
 
       const errorInfo = categorizeGeminiError(error);
       console.warn(
@@ -280,8 +339,8 @@ export async function executeWithRetry<T>(
     }
   }
 
-  const { statusCode, message, category } = categorizeGeminiError(lastError);
-  throw new GeminiServiceError(message, statusCode, category);
+  const { statusCode, message, category, retryAfterSeconds } = categorizeGeminiError(lastError);
+  throw new GeminiServiceError(message, statusCode, category, retryAfterSeconds);
 }
 
 export function isLiveAiConfigured(): boolean {
