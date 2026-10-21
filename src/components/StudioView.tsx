@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Film,
   Sparkles,
@@ -231,7 +231,11 @@ export const StudioView: React.FC<StudioViewProps> = ({
 
   // Retention DNA state
   const [selectedDnaSentence, setSelectedDnaSentence] = useState<RetentionSentence | null>(null);
-  const [dnaSuccessNotice, setDnaSuccessNotice] = useState<string | null>(null);
+  const [recentlyUpdatedSentenceId, setRecentlyUpdatedSentenceId] = useState<string | null>(null);
+  const [dnaSuccessNotice, setDnaSuccessNotice] = useState<{
+    message: string;
+    diff: number | null;
+  } | null>(null);
   const [isDnaExpanded, setIsDnaExpanded] = useState(true);
 
   // Active Hook Index
@@ -303,11 +307,44 @@ export const StudioView: React.FC<StudioViewProps> = ({
     return Math.round(totalWeightedScore / (totalWeight || 1));
   }, [retentionSentences]);
 
+  // Animated Retention Score (smooth count-up interpolation)
+  const [animatedScore, setAnimatedScore] = useState(overallRetentionScore);
+
+  useEffect(() => {
+    if (animatedScore === overallRetentionScore) return;
+
+    const start = animatedScore;
+    const end = overallRetentionScore;
+    const duration = 450;
+    const startTime = performance.now();
+
+    const animate = (currentTime: number) => {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const ease = 1 - Math.pow(1 - progress, 3);
+      const current = Math.round(start + (end - start) * ease);
+
+      setAnimatedScore(current);
+
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        setAnimatedScore(end);
+      }
+    };
+
+    const handle = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(handle);
+  }, [overallRetentionScore]);
+
   const highCount = retentionSentences.filter((s) => s.level === 'high').length;
   const mediumCount = retentionSentences.filter((s) => s.level === 'medium').length;
   const lowCount = retentionSentences.filter((s) => s.level === 'low').length;
 
   const handleApplyDnaFix = (sentence: RetentionSentence, replacementText: string) => {
+    const targetSentenceId = sentence.id;
+
+    // 1. Instant clean sentence replacement
     if (sentence.sourceType === 'hook') {
       const currentHookText = project.hooks[sentence.sourceIndex]?.text || '';
       const updatedText = currentHookText.includes(sentence.originalText)
@@ -322,9 +359,33 @@ export const StudioView: React.FC<StudioViewProps> = ({
         : replacementText;
       handleUpdateScene(sentence.sourceIndex, { audioVoiceover: updatedVoiceover });
     }
+
+    // 2. Automatically close the rewrite popover
     setSelectedDnaSentence(null);
-    setDnaSuccessNotice('Fix applied! Retention score updated.');
-    setTimeout(() => setDnaSuccessNotice(null), 3000);
+
+    // 3. Highlight the newly updated sentence with emerald pulse for ~1.5s
+    setRecentlyUpdatedSentenceId(targetSentenceId);
+    setTimeout(() => {
+      setRecentlyUpdatedSentenceId((current) => (current === targetSentenceId ? null : current));
+    }, 1500);
+
+    // 4. Calculate actual sentence improvement and overall score gain
+    const newAnalysis = analyzeRetentionSentence(replacementText, sentence.position);
+    const sentenceScoreDiff = Math.max(newAnalysis.score - sentence.score, 0);
+    const approxOverallGain = Math.max(Math.round(sentenceScoreDiff * (sentence.weight / 6)), 1);
+
+    const message = approxOverallGain > 0
+      ? `Retention improved +${approxOverallGain} pts · Line strengthened`
+      : 'Line strengthened · Drop-off risk reduced';
+
+    setDnaSuccessNotice({
+      message,
+      diff: approxOverallGain > 0 ? approxOverallGain : null,
+    });
+
+    setTimeout(() => {
+      setDnaSuccessNotice(null);
+    }, 2400);
   };
 
   // Calculate total script seconds
@@ -637,25 +698,32 @@ export const StudioView: React.FC<StudioViewProps> = ({
           {/* Retention Score Ring & Breakdown */}
           <div className="flex items-center gap-3 sm:gap-4 shrink-0">
             {/* Score Pill */}
-            <div className="flex items-center gap-2.5 rounded-2xl bg-slate-100/90 dark:bg-white/5 border border-slate-200/80 dark:border-white/10 px-3.5 py-1.5">
+            <div className="flex items-center gap-2.5 rounded-2xl bg-slate-100/90 dark:bg-white/5 border border-slate-200/80 dark:border-white/10 px-3.5 py-1.5 transition-all duration-300">
               <div className="text-right">
                 <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 dark:text-zinc-500 block leading-none">
                   Retention Score
                 </span>
-                <span className="text-lg sm:text-xl font-extrabold font-mono text-slate-900 dark:text-white leading-tight">
-                  {overallRetentionScore}
+                <div className="flex items-baseline justify-end gap-1">
+                  <span className="text-lg sm:text-xl font-extrabold font-mono text-slate-900 dark:text-white leading-tight transition-transform duration-300">
+                    {animatedScore}
+                  </span>
                   <span className="text-xs text-slate-400 dark:text-zinc-500 font-normal">/100</span>
-                </span>
+                  {dnaSuccessNotice?.diff && (
+                    <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 animate-pulse ml-0.5 font-mono">
+                      +{dnaSuccessNotice.diff}
+                    </span>
+                  )}
+                </div>
               </div>
               <div
-                className={`h-3 w-3 rounded-full shrink-0 ${
-                  overallRetentionScore >= 78
+                className={`h-3 w-3 rounded-full shrink-0 transition-colors duration-300 ${
+                  animatedScore >= 78
                     ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]'
-                    : overallRetentionScore >= 62
+                    : animatedScore >= 60
                     ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.5)]'
                     : 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]'
                 }`}
-                title={`Overall Retention: ${overallRetentionScore}/100`}
+                title={`Overall Retention: ${animatedScore}/100`}
               />
             </div>
 
@@ -673,9 +741,18 @@ export const StudioView: React.FC<StudioViewProps> = ({
 
         {/* Success feedback toast if sentence updated */}
         {dnaSuccessNotice && (
-          <div className="mt-3 flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 border border-emerald-500/25 px-3 py-1.5 rounded-xl animate-fade-in">
-            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-            <span>{dnaSuccessNotice}</span>
+          <div className="mt-3 flex items-center justify-between gap-3 text-xs font-semibold text-emerald-800 dark:text-emerald-200 bg-emerald-500/15 dark:bg-emerald-500/20 border border-emerald-500/30 px-3.5 py-2 rounded-2xl shadow-sm animate-fade-in backdrop-blur-md">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white shrink-0 shadow-xs">
+                <Check className="h-3 w-3" />
+              </span>
+              <span className="truncate">{dnaSuccessNotice.message}</span>
+            </div>
+            {dnaSuccessNotice.diff && (
+              <span className="rounded-lg bg-emerald-500/25 px-2 py-0.5 text-[11px] font-bold text-emerald-800 dark:text-emerald-200 font-mono shrink-0">
+                +{dnaSuccessNotice.diff} PTS
+              </span>
+            )}
           </div>
         )}
 
@@ -689,14 +766,17 @@ export const StudioView: React.FC<StudioViewProps> = ({
                   const isLow = sentence.level === 'low';
                   const isMed = sentence.level === 'medium';
                   const isHigh = sentence.level === 'high';
+                  const isJustUpdated = recentlyUpdatedSentenceId === sentence.id;
 
                   return (
                     <button
                       key={sentence.id}
                       type="button"
                       onClick={() => setSelectedDnaSentence(sentence)}
-                      className={`group relative text-left rounded-xl px-2.5 py-1 text-xs sm:text-[13px] font-medium transition-all duration-150 border cursor-pointer active:scale-[0.98] ${
-                        isHigh
+                      className={`group relative text-left rounded-xl px-2.5 py-1 text-xs sm:text-[13px] font-medium transition-all duration-300 border cursor-pointer active:scale-[0.98] ${
+                        isJustUpdated
+                          ? 'ring-2 ring-emerald-500 bg-emerald-500/25 text-emerald-950 dark:text-emerald-100 border-emerald-500/50 shadow-[0_0_18px_rgba(16,185,129,0.45)] scale-[1.03] z-10'
+                          : isHigh
                           ? 'bg-emerald-500/10 text-emerald-950 dark:text-emerald-200 border-emerald-500/20 hover:bg-emerald-500/20 hover:border-emerald-500/40 shadow-sm'
                           : isMed
                           ? 'bg-amber-500/10 text-amber-950 dark:text-amber-200 border-amber-500/30 hover:bg-amber-500/20 hover:border-amber-500/50 shadow-sm'
@@ -708,9 +788,14 @@ export const StudioView: React.FC<StudioViewProps> = ({
                         {sentence.sourceType === 'hook' ? '🪝 Hook' : `S${sentence.sourceIndex + 1}`}
                       </span>
                       <span>{sentence.originalText}</span>
-                      {!isHigh && (
+                      {!isHigh && !isJustUpdated && (
                         <span className="ml-1.5 inline-flex items-center text-[10px] opacity-75 font-mono">
                           {sentence.score}
+                        </span>
+                      )}
+                      {isJustUpdated && (
+                        <span className="ml-1.5 inline-flex items-center text-[10px] font-bold text-emerald-600 dark:text-emerald-300 font-mono">
+                          ✓ Updated
                         </span>
                       )}
                     </button>
