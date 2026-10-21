@@ -19,11 +19,190 @@ import {
   Type,
   Video,
   Layers,
+  Activity,
+  Flame,
+  ArrowRight,
+  AlertTriangle,
+  CheckCircle2,
+  X,
 } from 'lucide-react';
 import { VideoProject, ScriptScene, Hook, QuickEditRequest } from '../types';
 import { PLATFORM_INFO, TONE_LABELS } from '../services/templates';
 import { QuickEditModal } from './QuickEditModal';
 import { TeleprompterModal } from './TeleprompterModal';
+
+export type RetentionPosition = 'hook' | 'opening' | 'middle' | 'closing';
+
+export interface RetentionSentence {
+  id: string;
+  sourceType: 'hook' | 'scene';
+  sourceIndex: number;
+  originalText: string;
+  score: number;
+  level: 'high' | 'medium' | 'low';
+  diagnosis: string;
+  suggestions: string[];
+  position: RetentionPosition;
+  weight: number;
+}
+
+export function splitIntoSentences(text: string): string[] {
+  if (!text) return [];
+  const rawSentences = text
+    .split(/(?<=[.?!])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return rawSentences.length > 0 ? rawSentences : [text.trim()];
+}
+
+export function analyzeRetentionSentence(
+  rawText: string,
+  position: RetentionPosition = 'middle'
+): {
+  score: number;
+  level: 'high' | 'medium' | 'low';
+  diagnosis: string;
+  suggestions: string[];
+} {
+  const text = rawText.trim();
+  const words = text.split(/\s+/).filter(Boolean);
+  const wordCount = words.length;
+
+  // Base score according to position sensitivity:
+  // Hooks & openings are scrutinized more strictly (baseline 68-70), while middle/closing are slightly more forgiving (73-75)
+  let score = position === 'hook' ? 68 : position === 'opening' ? 70 : position === 'closing' ? 75 : 73;
+  const diagnoses: string[] = [];
+
+  // 1. Weak low-urgency filler starters (Severe drop-off signal in short-form)
+  const weakStarters = /^(so|basically|i think|in my opinion|well|you know|like|just|um|honestly|alright|okay|today i want to|in this video)\b/i;
+  const matchedWeak = text.match(weakStarters);
+  if (matchedWeak) {
+    const penalty = position === 'hook' ? 24 : 18;
+    score -= penalty;
+    diagnoses.push(`Starts with a low-urgency filler word ("${matchedWeak[0]}") that invites viewers to swipe`);
+  }
+
+  // 2. Overly long sentence penalty (Audience loses thread without breathing pauses)
+  if (wordCount > 22) {
+    score -= 18;
+    diagnoses.push(`Too long (${wordCount} words) without a curiosity spike or pattern interrupt`);
+  } else if (wordCount > 18) {
+    score -= 10;
+    diagnoses.push(`Wordy phrasing (${wordCount} words) slows down script momentum`);
+  } else if (wordCount >= 4 && wordCount <= 13) {
+    // Punchy short-form cadence bonus
+    score += 8;
+  } else if (wordCount < 4) {
+    score -= 4;
+  }
+
+  // 3. Passive or vague phrasing (weakens tension)
+  const passivePhrases = /\b(kind of|sort of|maybe|pretty much|in order to|as you know|i guess|somewhat|more or less|try to)\b/i;
+  const matchedPassive = text.match(passivePhrases);
+  if (matchedPassive) {
+    score -= 14;
+    diagnoses.push(`Passive phrasing ("${matchedPassive[0]}") softens viewer tension`);
+  }
+
+  // 4. Strong Hook & Pattern Interrupt signals (High positive signal)
+  const isQuestion = /[?]$/.test(text) || /^(\w+\s+){0,3}(why|how|what|did you know|have you ever|is it possible|who else|could this)\b/i.test(text);
+  const isPatternInterrupt = /^(stop|don't|never|watch this|listen up|look at|check this out|wait)\b/i.test(text);
+  const isCuriosityOpener = /^(nobody talks about|here's the truth|the real reason|the secret to|what they don't tell you|the biggest mistake|here's why|this is how)\b/i.test(text);
+
+  if (isQuestion) {
+    score += position === 'hook' ? 16 : 10;
+  }
+  if (isPatternInterrupt) {
+    score += position === 'hook' ? 15 : 10;
+  }
+  if (isCuriosityOpener) {
+    score += position === 'hook' ? 16 : 12;
+  }
+
+  // 5. Curiosity Gap & Open Loops
+  const hasCuriosityGap = /\b(the crazy part|what happens next|before you|until you see|wait until|secret|the real reason|what nobody tells you|the truth about|loophole|glitch)\b/i.test(text);
+  if (hasCuriosityGap) {
+    score += 10;
+  }
+
+  // 6. Contrast & Tension Words
+  const hasContrast = /\b(but|instead|actually|until|however|yet|except|opposite|reveals|in reality|even if)\b/i.test(text);
+  if (hasContrast) {
+    score += 8;
+  }
+
+  // 7. Specific Numbers or Concrete Metrics
+  const hasNumbers = /\b(\d+([.,]\d+)?(%|k|m|x|\$)?|\b(one|two|three|3-step|zero|10x|99%|first|second))\b/i.test(text);
+  if (hasNumbers) {
+    score += 8;
+  }
+
+  // 8. Emotional or High-Urgency Language
+  const hasUrgency = /\b(shocking|insane|deadly|game-changer|immediately|ruining|warning|stealing|blew my mind|critical|massive|exposed|danger|essential|mistake|waste|ruin)\b/i.test(text);
+  if (hasUrgency) {
+    score += 8;
+  }
+
+  // 9. Pure explanation check (No hooks, no contrast, no tension in longer lines)
+  if (!isQuestion && !isPatternInterrupt && !isCuriosityOpener && !hasCuriosityGap && !hasContrast && !hasNumbers && !hasUrgency && wordCount > 13) {
+    score -= 12;
+    if (diagnoses.length === 0) {
+      diagnoses.push('Pure explanation without tension, contrast, or a curiosity spike');
+    }
+  }
+
+  // 10. Position-specific checks:
+  // Hook must have an immediate hook mechanism; otherwise it is penalized
+  if (position === 'hook') {
+    if (!isQuestion && !isPatternInterrupt && !isCuriosityOpener && !hasNumbers && !hasCuriosityGap) {
+      score -= 14;
+      diagnoses.unshift('Opening hook lacks an immediate curiosity gap, question, or bold premise');
+    }
+  }
+
+  // Clamp score cleanly between 25 and 98
+  const finalScore = Math.min(Math.max(Math.round(score), 25), 98);
+  const level: 'high' | 'medium' | 'low' =
+    finalScore >= 78 ? 'high' : finalScore >= 60 ? 'medium' : 'low';
+
+  const diagnosis =
+    diagnoses[0] ||
+    (level === 'low'
+      ? 'High drop-off risk: line lacks urgency, contrast, or emotional hook'
+      : level === 'medium'
+      ? 'Solid statement, but needs a sharper curiosity spike or punchier phrasing'
+      : 'High retention: punchy cadence with strong curiosity and audience pull');
+
+  // Generate 4 targeted, surgical rewrites
+  const strippedText = text.replace(weakStarters, '').replace(/^[,\s]+/, '');
+  const capitalizedClean = strippedText ? strippedText.charAt(0).toUpperCase() + strippedText.slice(1) : text;
+  const noPunctuation = capitalizedClean.replace(/[.?!]+$/, '');
+
+  const suggestions: string[] = [
+    // 1. Punchy & Direct (Strip filler, cut passive fluff)
+    capitalizedClean
+      .replace(/\b(in order to)\b/gi, 'to')
+      .replace(/\b(kind of|sort of|pretty much)\b/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim(),
+
+    // 2. Curiosity Spike (Open loop)
+    `Here's what nobody talks about: ${capitalizedClean.toLowerCase().replace(/^(here's|what|the)\s+/i, '').replace(/[.?!]$/, '')}.`,
+
+    // 3. Pattern Interrupt (Stop the scroll)
+    `Stop scrolling. ${noPunctuation}.`,
+
+    // 4. Contrast & Concrete Outcome
+    `Instead of wasting time, ${capitalizedClean.toLowerCase().replace(/^(you|we)\s+/i, '').replace(/[.?!]$/, '')}.`,
+  ];
+
+  return {
+    score: finalScore,
+    level,
+    diagnosis,
+    suggestions: Array.from(new Set(suggestions)).slice(0, 4),
+  };
+}
 
 interface StudioViewProps {
   project: VideoProject;
@@ -49,6 +228,104 @@ export const StudioView: React.FC<StudioViewProps> = ({
   const [showQuickEdit, setShowQuickEdit] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Retention DNA state
+  const [selectedDnaSentence, setSelectedDnaSentence] = useState<RetentionSentence | null>(null);
+  const [dnaSuccessNotice, setDnaSuccessNotice] = useState<string | null>(null);
+  const [isDnaExpanded, setIsDnaExpanded] = useState(true);
+
+  // Active Hook Index
+  const activeHookIndex = Math.max(
+    project.hooks.findIndex((h) => h.id === project.selectedHookId),
+    0
+  );
+  const activeHook = project.hooks[activeHookIndex] || project.hooks[0];
+
+  // Retention DNA Analysis: live continuous flow of sentences across hook + scenes
+  const retentionSentences = React.useMemo(() => {
+    const list: RetentionSentence[] = [];
+
+    // 1. Hook sentence(s) (First 3 seconds: highest drop-off sensitivity)
+    if (activeHook && activeHook.text) {
+      const hookSentences = splitIntoSentences(activeHook.text);
+      hookSentences.forEach((s, sIdx) => {
+        const pos: RetentionPosition = sIdx === 0 ? 'hook' : 'opening';
+        const weight = sIdx === 0 ? 3.0 : 2.0;
+        const analysis = analyzeRetentionSentence(s, pos);
+        list.push({
+          id: `hook_${activeHook.id || 'main'}_${sIdx}`,
+          sourceType: 'hook',
+          sourceIndex: activeHookIndex,
+          originalText: s,
+          score: analysis.score,
+          level: analysis.level,
+          diagnosis: analysis.diagnosis,
+          suggestions: analysis.suggestions,
+          position: pos,
+          weight,
+        });
+      });
+    }
+
+    // 2. Scene sentences
+    const totalScenes = project.scenes.length;
+    project.scenes.forEach((scene, scIdx) => {
+      const sceneSentences = splitIntoSentences(scene.audioVoiceover || '');
+      sceneSentences.forEach((s, sIdx) => {
+        const isOpening = scIdx === 0;
+        const isClosing = scIdx === totalScenes - 1;
+        const pos: RetentionPosition = isOpening ? 'opening' : isClosing ? 'closing' : 'middle';
+        const weight = isOpening ? 2.0 : isClosing ? 1.0 : 1.2;
+        const analysis = analyzeRetentionSentence(s, pos);
+        list.push({
+          id: `scene_${scene.id}_${sIdx}`,
+          sourceType: 'scene',
+          sourceIndex: scIdx,
+          originalText: s,
+          score: analysis.score,
+          level: analysis.level,
+          diagnosis: analysis.diagnosis,
+          suggestions: analysis.suggestions,
+          position: pos,
+          weight,
+        });
+      });
+    });
+
+    return list;
+  }, [project.scenes, activeHook, activeHookIndex]);
+
+  // Overall retention score (position-weighted realistic average out of 100)
+  const overallRetentionScore = React.useMemo(() => {
+    if (retentionSentences.length === 0) return 80;
+    const totalWeightedScore = retentionSentences.reduce((acc, curr) => acc + curr.score * curr.weight, 0);
+    const totalWeight = retentionSentences.reduce((acc, curr) => acc + curr.weight, 0);
+    return Math.round(totalWeightedScore / (totalWeight || 1));
+  }, [retentionSentences]);
+
+  const highCount = retentionSentences.filter((s) => s.level === 'high').length;
+  const mediumCount = retentionSentences.filter((s) => s.level === 'medium').length;
+  const lowCount = retentionSentences.filter((s) => s.level === 'low').length;
+
+  const handleApplyDnaFix = (sentence: RetentionSentence, replacementText: string) => {
+    if (sentence.sourceType === 'hook') {
+      const currentHookText = project.hooks[sentence.sourceIndex]?.text || '';
+      const updatedText = currentHookText.includes(sentence.originalText)
+        ? currentHookText.replace(sentence.originalText, replacementText)
+        : replacementText;
+      handleUpdateHook(sentence.sourceIndex, updatedText);
+    } else {
+      const currentScene = project.scenes[sentence.sourceIndex];
+      const currentVoiceover = currentScene?.audioVoiceover || '';
+      const updatedVoiceover = currentVoiceover.includes(sentence.originalText)
+        ? currentVoiceover.replace(sentence.originalText, replacementText)
+        : replacementText;
+      handleUpdateScene(sentence.sourceIndex, { audioVoiceover: updatedVoiceover });
+    }
+    setSelectedDnaSentence(null);
+    setDnaSuccessNotice('Fix applied! Retention score updated.');
+    setTimeout(() => setDnaSuccessNotice(null), 3000);
+  };
 
   // Calculate total script seconds
   const totalScriptSeconds = project.scenes.reduce((acc, s) => acc + (s.durationSeconds || 0), 0);
@@ -326,6 +603,145 @@ export const StudioView: React.FC<StudioViewProps> = ({
             )}
           </div>
         </div>
+      </div>
+
+      {/* 🚀 RETENTION DNA PANEL: Core Unique Feature of FRAME */}
+      <div className="mb-6 rounded-3xl glass-surface p-5 sm:p-6 shadow-xl border border-slate-200/80 dark:border-white/10 backdrop-blur-xl relative overflow-hidden transition-all duration-200">
+        {/* Subtle specular reflection */}
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-slate-300/60 dark:via-white/30 to-transparent"
+          aria-hidden="true"
+        />
+
+        {/* Panel Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/70 dark:border-white/10">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400 border border-indigo-500/20 shadow-sm shrink-0">
+              <Activity className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+                  <span>Retention DNA™</span>
+                  <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20">
+                    Live Attention Heat-Map
+                  </span>
+                </h2>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+                Every line is analyzed for viewer drop-off risk. Click any sentence to surgically rewrite it.
+              </p>
+            </div>
+          </div>
+
+          {/* Retention Score Ring & Breakdown */}
+          <div className="flex items-center gap-3 sm:gap-4 shrink-0">
+            {/* Score Pill */}
+            <div className="flex items-center gap-2.5 rounded-2xl bg-slate-100/90 dark:bg-white/5 border border-slate-200/80 dark:border-white/10 px-3.5 py-1.5">
+              <div className="text-right">
+                <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 dark:text-zinc-500 block leading-none">
+                  Retention Score
+                </span>
+                <span className="text-lg sm:text-xl font-extrabold font-mono text-slate-900 dark:text-white leading-tight">
+                  {overallRetentionScore}
+                  <span className="text-xs text-slate-400 dark:text-zinc-500 font-normal">/100</span>
+                </span>
+              </div>
+              <div
+                className={`h-3 w-3 rounded-full shrink-0 ${
+                  overallRetentionScore >= 78
+                    ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]'
+                    : overallRetentionScore >= 62
+                    ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.5)]'
+                    : 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]'
+                }`}
+                title={`Overall Retention: ${overallRetentionScore}/100`}
+              />
+            </div>
+
+            {/* Expand / Collapse toggle */}
+            <button
+              type="button"
+              onClick={() => setIsDnaExpanded((prev) => !prev)}
+              aria-label={isDnaExpanded ? 'Collapse Retention DNA' : 'Expand Retention DNA'}
+              className="rounded-xl border border-slate-200/80 dark:border-white/10 bg-white/70 dark:bg-white/5 p-2 text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors shadow-sm cursor-pointer"
+            >
+              {isDnaExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+          </div>
+        </div>
+
+        {/* Success feedback toast if sentence updated */}
+        {dnaSuccessNotice && (
+          <div className="mt-3 flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 border border-emerald-500/25 px-3 py-1.5 rounded-xl animate-fade-in">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            <span>{dnaSuccessNotice}</span>
+          </div>
+        )}
+
+        {/* Expanded Continuous Script Flow */}
+        {isDnaExpanded && (
+          <div className="mt-4 space-y-4">
+            {/* Heat-map Sentence Canvas */}
+            <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-50/70 dark:bg-black/30 border border-slate-200/60 dark:border-white/5 leading-relaxed text-sm">
+              <div className="flex flex-wrap items-baseline gap-1.5 sm:gap-2">
+                {retentionSentences.map((sentence) => {
+                  const isLow = sentence.level === 'low';
+                  const isMed = sentence.level === 'medium';
+                  const isHigh = sentence.level === 'high';
+
+                  return (
+                    <button
+                      key={sentence.id}
+                      type="button"
+                      onClick={() => setSelectedDnaSentence(sentence)}
+                      className={`group relative text-left rounded-xl px-2.5 py-1 text-xs sm:text-[13px] font-medium transition-all duration-150 border cursor-pointer active:scale-[0.98] ${
+                        isHigh
+                          ? 'bg-emerald-500/10 text-emerald-950 dark:text-emerald-200 border-emerald-500/20 hover:bg-emerald-500/20 hover:border-emerald-500/40 shadow-sm'
+                          : isMed
+                          ? 'bg-amber-500/10 text-amber-950 dark:text-amber-200 border-amber-500/30 hover:bg-amber-500/20 hover:border-amber-500/50 shadow-sm'
+                          : 'bg-rose-500/10 text-rose-950 dark:text-rose-200 border-rose-500/35 hover:bg-rose-500/20 hover:border-rose-500/60 shadow-sm'
+                      }`}
+                      title={`${sentence.score}/100 · ${sentence.diagnosis} (Click to rewrite)`}
+                    >
+                      <span className="mr-1.5 inline-block text-[10px] font-bold uppercase opacity-60">
+                        {sentence.sourceType === 'hook' ? '🪝 Hook' : `S${sentence.sourceIndex + 1}`}
+                      </span>
+                      <span>{sentence.originalText}</span>
+                      {!isHigh && (
+                        <span className="ml-1.5 inline-flex items-center text-[10px] opacity-75 font-mono">
+                          {sentence.score}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Retention Legend & Quick Statistics */}
+            <div className="flex flex-wrap items-center justify-between text-xs text-slate-500 dark:text-zinc-400 pt-1 gap-2">
+              <div className="flex items-center gap-3 sm:gap-4">
+                <span className="flex items-center gap-1.5 font-medium">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                  <span>Strong ({highCount})</span>
+                </span>
+                <span className="flex items-center gap-1.5 font-medium">
+                  <span className="h-2 w-2 rounded-full bg-amber-400" />
+                  <span>Medium Risk ({mediumCount})</span>
+                </span>
+                <span className="flex items-center gap-1.5 font-medium">
+                  <span className="h-2 w-2 rounded-full bg-rose-500" />
+                  <span>Drop-Off Risk ({lowCount})</span>
+                </span>
+              </div>
+
+              <span className="text-[11px] text-slate-400 dark:text-zinc-500 italic">
+                Tip: Click any yellow or red sentence to open 3–4 instant surgical rewrites.
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Main Studio Navigation Tabs: Apple Liquid Glass Segmented Bar */}
@@ -793,6 +1209,143 @@ export const StudioView: React.FC<StudioViewProps> = ({
           isProcessing={isQuickEditing}
           isAiLive={isAiLive}
         />
+      )}
+
+      {/* Retention DNA Surgical Rewrite Popover / Modal */}
+      {selectedDnaSentence && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="dna-rewrite-dialog-title"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/50 dark:bg-black/70 backdrop-blur-md animate-fade-in"
+          onClick={() => setSelectedDnaSentence(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-lg rounded-3xl bg-white/95 dark:bg-[#121217]/95 border border-[var(--border-default)] shadow-2xl p-6 sm:p-7 backdrop-blur-2xl text-left relative overflow-hidden flex flex-col max-h-[90vh] transition-colors duration-200 animate-modal-enter"
+          >
+            {/* Top specular reflection line */}
+            <div
+              className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-slate-300/60 dark:via-white/35 to-transparent rounded-t-3xl"
+              aria-hidden="true"
+            />
+
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3.5 border-b border-slate-200/80 dark:border-white/10 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div
+                  className={`flex h-8 w-8 items-center justify-center rounded-xl text-xs font-bold font-mono border ${
+                    selectedDnaSentence.level === 'high'
+                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25'
+                      : selectedDnaSentence.level === 'medium'
+                      ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/25'
+                      : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/25'
+                  }`}
+                >
+                  {selectedDnaSentence.score}
+                </div>
+                <div>
+                  <h3 id="dna-rewrite-dialog-title" className="text-sm font-bold text-slate-900 dark:text-white">
+                    Surgical Retention Rewrite
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-zinc-400">
+                    {selectedDnaSentence.sourceType === 'hook' ? 'Hook Opening' : `Scene ${selectedDnaSentence.sourceIndex + 1} Voiceover`}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedDnaSentence(null)}
+                aria-label="Close rewrite dialog"
+                className="rounded-xl p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto py-4 space-y-4 pr-1">
+              {/* Current Sentence Box */}
+              <div className="rounded-2xl p-3.5 bg-slate-50 dark:bg-white/[0.03] border border-slate-200/70 dark:border-white/10">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 block mb-1">
+                  Current Line
+                </span>
+                <p className="text-xs sm:text-sm text-slate-800 dark:text-zinc-200 font-medium italic">
+                  "{selectedDnaSentence.originalText}"
+                </p>
+              </div>
+
+              {/* Diagnosis Box */}
+              <div
+                className={`flex items-start gap-2.5 p-3 rounded-xl border text-xs ${
+                  selectedDnaSentence.level === 'low'
+                    ? 'bg-rose-500/10 border-rose-500/20 text-rose-700 dark:text-rose-300'
+                    : selectedDnaSentence.level === 'medium'
+                    ? 'bg-amber-500/10 border-amber-500/20 text-amber-700 dark:text-amber-300'
+                    : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-300'
+                }`}
+              >
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold block">Retention Diagnosis:</span>
+                  <span>{selectedDnaSentence.diagnosis}</span>
+                </div>
+              </div>
+
+              {/* 3-4 Surgical Rewrite Suggestions */}
+              <div className="space-y-2.5">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400 block">
+                  Select a Surgical Rewrite:
+                </span>
+                {selectedDnaSentence.suggestions.map((suggestion, idx) => (
+                  <div
+                    key={idx}
+                    className="group rounded-2xl p-3.5 border border-slate-200/90 dark:border-white/10 bg-white/70 dark:bg-white/[0.02] hover:bg-slate-50 dark:hover:bg-white/[0.05] hover:border-slate-400/60 dark:hover:border-white/20 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-500 dark:text-indigo-400 block mb-0.5">
+                        {idx === 0
+                          ? '⚡ Punchy & Direct'
+                          : idx === 1
+                          ? '🪝 Curiosity Spike'
+                          : idx === 2
+                          ? '🛑 Pattern Interrupt'
+                          : '🎯 Action & Outcome'}
+                      </span>
+                      <p className="text-xs sm:text-sm text-slate-900 dark:text-white font-medium">
+                        "{suggestion}"
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleApplyDnaFix(selectedDnaSentence, suggestion)}
+                      className="rounded-full bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:hover:bg-zinc-100 dark:text-zinc-950 px-3.5 py-1.5 text-xs font-semibold shadow-sm transition-all active:scale-95 shrink-0 self-end sm:self-auto flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span>Apply this fix</span>
+                      <ArrowRight className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="pt-3.5 border-t border-slate-200/80 dark:border-white/10 flex items-center justify-between shrink-0">
+              <span className="text-[11px] text-slate-400 dark:text-zinc-500">
+                Fixes update the live scene text instantly
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelectedDnaSentence(null)}
+                className="text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 px-3 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 transition-colors cursor-pointer"
+              >
+                Keep original
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

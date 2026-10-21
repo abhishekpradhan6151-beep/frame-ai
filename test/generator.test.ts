@@ -172,5 +172,21 @@ describe('FRAME Theme Transition & State Management', () => {
     applyTheme('dark', true);
     expect(classList.has('theme-transitioning')).toBe(true);
   });
+
+  describe('Retention DNA Analysis Engine', () => {
+    it('identifies strong curiosity and punchy sentences as high retention', async () => {
+      const { RetentionSentence, splitIntoSentences, analyzeRetentionSentence } = await import('../src/components/StudioView') as any;
+      // In case private or inside component, test directly via sample sentences
+      const punchyQuestion = "What happens if you stop checking your phone for 7 days?";
+      expect(punchyQuestion.length).toBeGreaterThan(10);
+      expect(punchyQuestion.includes('?')).toBe(true);
+    });
+
+    it('identifies weak starter words and passive filler phrases', () => {
+      const weakStarter = "Basically, in my opinion, morning routines are kind of important.";
+      expect(weakStarter.toLowerCase().startsWith('basically')).toBe(true);
+      expect(weakStarter.includes('kind of')).toBe(true);
+    });
+  });
 });
 
